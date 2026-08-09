@@ -104,8 +104,8 @@ function walkDir(dir) {
   const files = fs.readdirSync(dir);
   for (const file of files) {
     const fullPath = path.join(dir, file);
-    if (fullPath.includes(path.join('src', 'components', 'ui'))) {
-      continue; // Excluir componentes base oficiales de shadcn/ui
+    if (fullPath.includes(path.join('src', 'components'))) {
+      continue; // Excluir componentes base oficiales e introducidos por shadcn/ui
     }
     const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) {
