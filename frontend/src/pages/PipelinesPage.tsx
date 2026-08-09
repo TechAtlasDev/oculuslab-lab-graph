@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
 import type { PipelineJob, JobType } from '../types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Cpu, Play, CheckCircle, Clock, Spinner } from '@phosphor-icons/react';
 
 export const PipelinesPage: React.FC = () => {
@@ -25,10 +28,10 @@ export const PipelinesPage: React.FC = () => {
     const jobId = selectedType === 'PATH_FINDING'
       ? await analysisService.runPathFinding('node-1', 'node-3')
       : selectedType === 'PROJECTION'
-      ? await analysisService.runProjection('Node2Vec', 128)
-      : selectedType === 'EVIDENCE_SCORING'
-      ? await analysisService.runEvidenceScoring('node-1', 'node-3')
-      : await analysisService.runSubgraphExtraction(['node-1', 'node-2']);
+        ? await analysisService.runProjection('Node2Vec', 128)
+        : selectedType === 'EVIDENCE_SCORING'
+          ? await analysisService.runEvidenceScoring('node-1', 'node-3')
+          : await analysisService.runSubgraphExtraction(['node-1', 'node-2']);
 
     const updatedList = await analysisService.getAllJobs();
     setJobs(updatedList);
@@ -61,26 +64,30 @@ export const PipelinesPage: React.FC = () => {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-base font-medium text-foreground mb-2">Tipo de Computación</label>
-              <select
+              <label className="block text-base fmedium_r text-foreground mb-2">Tipo de Computación</label>
+              <Select
                 value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value as JobType)}
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-base text-foreground"
+                onValueChange={(val) => setSelectedType(val as JobType)}
               >
-                <option value="PATH_FINDING">Path Finding (Búsqueda de Caminos)</option>
-                <option value="PROJECTION">Proyección de Grafo (Embeddings)</option>
-                <option value="EVIDENCE_SCORING">Scoring de Evidencia (PaperQA3)</option>
-                <option value="SUBGRAPH_EXTRACTION">Extracción de Subgrafo</option>
-              </select>
+                <SelectTrigger className="w-full text-base">
+                  <SelectValue placeholder="Seleccionar pipeline" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PATH_FINDING" className="text-base">Path Finding (Búsqueda de Caminos)</SelectItem>
+                  <SelectItem value="PROJECTION" className="text-base">Proyección de Grafo (Embeddings)</SelectItem>
+                  <SelectItem value="EVIDENCE_SCORING" className="text-base">Scoring de Evidencia (PaperQA3)</SelectItem>
+                  <SelectItem value="SUBGRAPH_EXTRACTION" className="text-base">Extracción de Subgrafo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <button
+            <Button
               onClick={handleLaunchJob}
-              className="w-full py-3 px-4 bg-primary text-primary-foreground font-medium rounded-lg text-base hover:bg-primary/90 flex items-center justify-center gap-2"
+              className="w-full h-auto py-3 gap-2 text-base fmedium_r"
             >
               <Play size={20} weight="fill" />
               Ejecutar Job
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -96,12 +103,12 @@ export const PipelinesPage: React.FC = () => {
                 <div key={job.id} className="p-4 bg-muted/20 border border-border rounded-lg space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-lg font-bold text-foreground">{job.type}</span>
-                    <span className="flex items-center gap-2 px-3 py-1 bg-secondary text-secondary-foreground rounded-full text-base font-medium">
+                    <Badge variant="secondary" className="gap-2 text-base fmedium_r">
                       {job.status === 'done' && <CheckCircle size={18} className="text-emerald-500" />}
                       {job.status === 'running' && <Spinner size={18} className="animate-spin text-amber-500" />}
                       {job.status === 'pending' && <Clock size={18} className="text-muted-foreground" />}
                       {job.status.toUpperCase()}
-                    </span>
+                    </Badge>
                   </div>
 
                   <p className="text-base text-muted-foreground">ID: {job.id}</p>

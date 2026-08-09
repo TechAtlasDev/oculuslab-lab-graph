@@ -5,6 +5,10 @@ import { computeLayout } from '../engines/canvas/layout';
 import type { LayoutAlgorithm } from '../engines/canvas/layout';
 import { cullNodes } from '../engines/canvas/culling';
 import { renderGraphToCanvas } from '../engines/canvas/renderer';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MagnifyingGlass, BookmarkSimple, PlusCircle } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
@@ -112,20 +116,17 @@ export const ExplorerPage: React.FC = () => {
 
         {/* Buscador */}
         <form onSubmit={handleSearchForm} className="flex gap-3">
-          <input
+          <Input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar gen, proteína, enfermedad..."
-            className="px-4 py-2 bg-background border border-border rounded-lg text-foreground text-base focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-64 text-base"
           />
-          <button
-            type="submit"
-            className="px-5 py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 flex items-center gap-2 text-base"
-          >
+          <Button type="submit" className="gap-2 text-base fmedium_r">
             <MagnifyingGlass size={20} />
             Buscar
-          </button>
+          </Button>
         </form>
       </header>
 
@@ -136,15 +137,19 @@ export const ExplorerPage: React.FC = () => {
             <h2 className="text-xl font-semibold text-foreground">Canvas de Visualización</h2>
             <div className="flex items-center gap-2">
               <span className="text-base text-muted-foreground">Layout:</span>
-              <select
+              <Select
                 value={layoutAlg}
-                onChange={(e) => setLayoutAlg(e.target.value as LayoutAlgorithm)}
-                className="px-3 py-1 bg-background border border-border rounded-md text-base text-foreground"
+                onValueChange={(val) => setLayoutAlg(val as LayoutAlgorithm)}
               >
-                <option value="circular">Circular</option>
-                <option value="grid">Grid</option>
-                <option value="force-directed">Fuerza</option>
-              </select>
+                <SelectTrigger className="w-36 text-base">
+                  <SelectValue placeholder="Seleccionar layout" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="circular" className="text-base">Circular</SelectItem>
+                  <SelectItem value="grid" className="text-base">Grid</SelectItem>
+                  <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -160,9 +165,9 @@ export const ExplorerPage: React.FC = () => {
           {selectedNode ? (
             <div className="space-y-4">
               <div>
-                <span className="px-3 py-1 bg-secondary text-secondary-foreground rounded-full text-base font-medium">
+                <Badge variant="secondary" className="text-base fmedium_r">
                   {selectedNode.label}
-                </span>
+                </Badge>
                 <h3 className="text-2xl font-bold text-foreground mt-2">{selectedNode.name}</h3>
                 <p className="text-base text-muted-foreground mt-1">{selectedNode.description}</p>
               </div>
@@ -178,17 +183,14 @@ export const ExplorerPage: React.FC = () => {
                 </ul>
               </div>
 
-              <button
+              <Button
                 onClick={toggleSave}
-                className={`w-full py-3 px-4 rounded-lg text-base font-medium flex items-center justify-center gap-2 border ${
-                  isSaved
-                    ? 'bg-secondary text-secondary-foreground border-border'
-                    : 'bg-primary text-primary-foreground border-primary hover:bg-primary/90'
-                }`}
+                variant={isSaved ? "outline" : "default"}
+                className="w-full h-auto py-3 gap-2 text-base fmedium_r"
               >
                 {isSaved ? <BookmarkSimple size={22} weight="fill" /> : <PlusCircle size={22} />}
                 {isSaved ? 'Guardado en Workspace' : 'Guardar Nodo en Workspace'}
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="text-base text-muted-foreground">Selecciona o busca un nodo para inspeccionar sus datos.</p>

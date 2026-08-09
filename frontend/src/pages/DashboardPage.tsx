@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
 import type { GraphSchema, GraphNode } from '../types';
+import { Badge } from '@/components/ui/badge';
 import { Graph, MagnifyingGlass, BookmarkSimple, Cpu, CaretRight } from '@phosphor-icons/react';
 
 export const DashboardPage: React.FC = () => {
@@ -58,7 +59,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="p-6 bg-card rounded-xl border border-border space-y-3 shadow-sm">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-base font-medium">Total Nodos</span>
+            <span className="text-base fmedium_r">Total Nodos</span>
             <Graph size={28} />
           </div>
           <p className="text-4xl font-bold text-foreground">
@@ -69,7 +70,7 @@ export const DashboardPage: React.FC = () => {
 
         <div className="div-card p-6 bg-card rounded-xl border border-border space-y-3 shadow-sm">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-base font-medium">Total Aristas</span>
+            <span className="text-base fmedium_r">Total Aristas</span>
             <Cpu size={28} />
           </div>
           <p className="text-4xl font-bold text-foreground">
@@ -80,7 +81,7 @@ export const DashboardPage: React.FC = () => {
 
         <div className="p-6 bg-card rounded-xl border border-border space-y-3 shadow-sm">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-base font-medium">Nodos Guardados</span>
+            <span className="text-base fmedium_r">Nodos Guardados</span>
             <BookmarkSimple size={28} />
           </div>
           <p className="text-4xl font-bold text-foreground">{savedCount}</p>
@@ -113,11 +114,11 @@ export const DashboardPage: React.FC = () => {
           <ul className="divide-y divide-border">
             {recentNodes.map((node) => (
               <li key={node.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <span className="text-lg font-medium text-foreground">{node.name}</span>
-                  <span className="ml-3 px-3 py-1 bg-secondary text-secondary-foreground rounded-full text-base">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg fmedium_r text-foreground">{node.name}</span>
+                  <Badge variant="secondary" className="text-base">
                     {node.label}
-                  </span>
+                  </Badge>
                 </div>
                 <CaretRight size={20} className="text-muted-foreground" />
               </li>

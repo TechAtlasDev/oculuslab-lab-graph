@@ -16,9 +16,9 @@ function AppContent() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background text-foreground font-sans">
+      <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden">
         <AppSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        <SidebarInset className="flex flex-col flex-1 min-w-0">
+        <SidebarInset className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden">
           <SiteHeader activeTab={activeTab} />
           <main className="flex-1 overflow-y-auto">
             {activeTab === 'dashboard' && <DashboardPage />}

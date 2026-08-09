@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
 import type { Collection, GraphNode, UserPreferences } from '../types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Folder, Trash, BookmarkSimple, SlidersHorizontal } from '@phosphor-icons/react';
 
 export const WorkspacePage: React.FC = () => {
@@ -96,9 +100,9 @@ export const WorkspacePage: React.FC = () => {
                   <div key={node.id} className="p-4 bg-muted/30 border border-border rounded-lg space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-bold text-foreground">{node.name}</span>
-                      <span className="px-2 py-1 bg-secondary text-secondary-foreground text-base rounded">
+                      <Badge variant="secondary" className="text-base">
                         {node.label}
-                      </span>
+                      </Badge>
                     </div>
                     <p className="text-base text-muted-foreground line-clamp-2">{node.description}</p>
                   </div>
@@ -115,19 +119,16 @@ export const WorkspacePage: React.FC = () => {
                 Colecciones ({collections.length})
               </h2>
               <form onSubmit={handleCreateCollection} className="flex gap-2">
-                <input
+                <Input
                   type="text"
                   value={newColName}
                   onChange={(e) => setNewColName(e.target.value)}
                   placeholder="Nueva colección..."
-                  className="px-3 py-1.5 bg-background border border-border rounded-lg text-base text-foreground"
+                  className="w-48 text-base"
                 />
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-primary text-primary-foreground text-base rounded-lg font-medium"
-                >
+                <Button type="submit" className="text-base fmedium_r">
                   Crear
-                </button>
+                </Button>
               </form>
             </div>
 
@@ -140,13 +141,15 @@ export const WorkspacePage: React.FC = () => {
                       {col.description || 'Sin descripción'} • {col.nodeIds.length} Nodos
                     </p>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => handleDeleteCollection(col.id)}
-                    className="p-2 text-destructive hover:bg-destructive/10 rounded-lg"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     title="Eliminar colección"
                   >
                     <Trash size={20} />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -163,30 +166,34 @@ export const WorkspacePage: React.FC = () => {
           {preferences && (
             <div className="space-y-4">
               <div>
-                <label className="block text-base font-medium text-foreground mb-1">Layout Predeterminado</label>
-                <select
+                <label className="block text-base fmedium_r text-foreground mb-1">Layout Predeterminado</label>
+                <Select
                   value={preferences.canvasLayout}
-                  onChange={(e) => handlePreferenceChange('canvasLayout', e.target.value)}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-base text-foreground"
+                  onValueChange={(val) => handlePreferenceChange('canvasLayout', val)}
                 >
-                  <option value="circular">Circular</option>
-                  <option value="grid">Grid</option>
-                  <option value="force-directed">Fuerza</option>
-                </select>
+                  <SelectTrigger className="w-full text-base">
+                    <SelectValue placeholder="Seleccionar layout" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="circular" className="text-base">Circular</SelectItem>
+                    <SelectItem value="grid" className="text-base">Grid</SelectItem>
+                    <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
-                <label className="block text-base font-medium text-foreground mb-1">Máximo Nodos Renderizados</label>
-                <input
+                <label className="block text-base fmedium_r text-foreground mb-1">Máximo Nodos Renderizados</label>
+                <Input
                   type="number"
                   value={preferences.maxRenderedNodes}
                   onChange={(e) => handlePreferenceChange('maxRenderedNodes', Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-base text-foreground"
+                  className="w-full text-base"
                 />
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <span className="text-base font-medium text-foreground">Mostrar Etiquetas</span>
+                <span className="text-base fmedium_r text-foreground">Mostrar Etiquetas</span>
                 <input
                   type="checkbox"
                   checked={preferences.showLabels}
