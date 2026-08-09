@@ -65,20 +65,37 @@ export const ExplorerPage: React.FC = () => {
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   
-  const [isSaved, setIsSaved] = useState<boolean>(false);
-  const [nodeDistance, setNodeDistance] = useState<number>(140);
+  // Instancia Persistente del Motor Físico D3 (Inicialización Lazy)
+  const physicsEngineRef = useRef<ForceGraphPhysicsEngine | null>(null);
 
-  // Tecla Espacio o Rueda Mantenida para Paneo Temporal Estilo Figma/Excalidraw
+  const getPhysicsEngine = useCallback(() => {
+    if (physicsEngineRef.current == null) {
+      physicsEngineRef.current = new ForceGraphPhysicsEngine(window.innerWidth, window.innerHeight);
+    }
+    return physicsEngineRef.current;
+  }, []);
+
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [nodeDistance, setNodeDistance] = useState<number>(() => {
+    const saved = localStorage.getItem('optimuskg_node_distance');
+    return saved ? Number(saved) : 140;
+  });
+
+  // Tecla Espacio Mantenida para Paneo Temporal Estilo Figma/Excalidraw
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
 
   // Context Menu State
   const [contextMenuTargetNode, setContextMenuTargetNode] = useState<GraphNode | null>(null);
 
-  // Instancia Persistente del Motor Físico D3
-  const physicsEngineRef = useRef<ForceGraphPhysicsEngine | null>(null);
-  if (physicsEngineRef.current == null) {
-    physicsEngineRef.current = new ForceGraphPhysicsEngine(window.innerWidth, window.innerHeight);
-  }
+  const handleDistanceChange = (dist: number) => {
+    setNodeDistance(dist);
+    localStorage.setItem('optimuskg_node_distance', String(dist));
+    getPhysicsEngine().setDistance(dist);
+  };
+
+  useEffect(() => {
+    getPhysicsEngine().setDistance(nodeDistance);
+  }, [nodeDistance, getPhysicsEngine]);
 
   // Estado del Viewport (Pan y Zoom)
   const [viewport, setViewport] = useState<Viewport>({
@@ -107,16 +124,20 @@ export const ExplorerPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Detectar Atajos de Teclado (Tecla Espacio Mantenida para Paneo Temporal)
+  // Ref para rastrear estado de tecla Espacio sin re-suscribir listeners
+  const isSpacePressedRef = useRef(false);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !isSpacePressed && document.activeElement?.tagName !== 'INPUT') {
+      if (e.code === 'Space' && !isSpacePressedRef.current && document.activeElement?.tagName !== 'INPUT') {
         e.preventDefault();
+        isSpacePressedRef.current = true;
         setIsSpacePressed(true);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
+        isSpacePressedRef.current = false;
         setIsSpacePressed(false);
       }
     };
@@ -127,7 +148,7 @@ export const ExplorerPage: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isSpacePressed]);
+  }, []);
 
   // Expansión Automática de Nodos al Desplazarte
   const expandVisibleNodesNeighbors = useCallback(async (visibleIds: Set<string>) => {
@@ -408,10 +429,21 @@ export const ExplorerPage: React.FC = () => {
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(Math.max(viewport.zoom * zoomFactor, 0.3), 3);
 
-    setViewport(prev => ({ ...prev, zoom: newZoom }));
+    if (e.ctrlKey || e.metaKey) {
+      // 1. Ctrl + Rueda: Zoom In / Zoom Out
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newZoom = Math.min(Math.max(viewport.zoom * zoomFactor, 0.3), 3);
+      setViewport(prev => ({ ...prev, zoom: newZoom }));
+    } else if (e.shiftKey) {
+      // 2. Shift + Rueda: Paneo Horizontal (Eje X)
+      const panSpeed = 1.2;
+      setViewport(prev => ({ ...prev, x: prev.x - e.deltaY * panSpeed }));
+    } else {
+      // 3. Rueda Solamente: Paneo Vertical (Eje Y)
+      const panSpeed = 1.2;
+      setViewport(prev => ({ ...prev, y: prev.y - e.deltaY * panSpeed }));
+    }
   };
 
   // Manejador del Clic Derecho para ContextMenu
@@ -634,8 +666,7 @@ export const ExplorerPage: React.FC = () => {
                   value={nodeDistance}
                   onChange={(e) => {
                     const dist = Number(e.target.value);
-                    setNodeDistance(dist);
-                    physicsEngineRef.current?.setDistance(dist);
+                    handleDistanceChange(dist);
                   }}
                   className="w-full cursor-pointer accent-primary h-2 bg-slate-200 rounded-lg appearance-none"
                 />
