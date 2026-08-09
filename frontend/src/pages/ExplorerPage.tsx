@@ -18,6 +18,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import {
   MagnifyingGlass,
   BookmarkSimple,
   PlusCircle,
@@ -29,6 +36,10 @@ import {
   ArrowsOut,
   Sparkle,
   X,
+  Camera,
+  MagnifyingGlassPlus,
+  MagnifyingGlassMinus,
+  CheckSquare,
 } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
@@ -39,10 +50,17 @@ export const ExplorerPage: React.FC = () => {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  
+  // Selección Múltiple de Nodos
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [nodeDistance, setNodeDistance] = useState<number>(140);
 
-  // Instancia Persistente del Motor Físico D3 (Inicialización segura)
+  // Context Menu State (Lienzo vs Nodo)
+  const [contextMenuTargetNode, setContextMenuTargetNode] = useState<GraphNode | null>(null);
+
+  // Instancia Persistente del Motor Físico D3
   const physicsEngineRef = useRef<ForceGraphPhysicsEngine | null>(null);
   if (physicsEngineRef.current == null) {
     physicsEngineRef.current = new ForceGraphPhysicsEngine(window.innerWidth, window.innerHeight);
@@ -57,7 +75,7 @@ export const ExplorerPage: React.FC = () => {
     zoom: 1,
   });
 
-  // Estados de Arrastre (Drag de Nodo vs Pan de Fondo)
+  // Estados de Arrastre
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -75,7 +93,7 @@ export const ExplorerPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Expansión Automática de Nodos al Desplazarte por la Pizarra
+  // Expansión Automática de Nodos al Desplazarte
   const expandVisibleNodesNeighbors = useCallback(async (visibleIds: Set<string>) => {
     if (loadingNeighbors) return;
     const newToExpand: string[] = [];
@@ -114,7 +132,6 @@ export const ExplorerPage: React.FC = () => {
           const addedEdges = allNewEdges.filter(e => !existingEdgeIds.has(e.id));
           const updatedEdges = [...prevEdges, ...addedEdges];
 
-          // Actualizar Simulación Física en Vivo
           physicsEngineRef.current?.updateGraph(updatedNodes, updatedEdges, viewport.width, viewport.height);
           return updatedEdges;
         });
@@ -132,7 +149,7 @@ export const ExplorerPage: React.FC = () => {
     setLoadingNeighbors(false);
   }, [expandedNodeIds, loadingNeighbors, graphDataService, viewport.width, viewport.height]);
 
-  // Renderizar en Canvas usando las Posiciones Físicas en Real-Time
+  // Renderizar en Canvas
   const renderFrame = useCallback(() => {
     if (!canvasRef.current || !physicsEngineRef.current) return;
     const canvas = canvasRef.current;
@@ -146,10 +163,11 @@ export const ExplorerPage: React.FC = () => {
       nodeRadius: 24,
       showLabels: true,
       selectedNodeId: selectedNode?.id,
+      selectedNodeIds: selectedNodeIds,
     });
 
     void expandVisibleNodesNeighbors(visibleIds);
-  }, [nodes, edges, viewport, selectedNode, expandVisibleNodesNeighbors]);
+  }, [nodes, edges, viewport, selectedNode, selectedNodeIds, expandVisibleNodesNeighbors]);
 
   // Suscribir callback de tick de la física D3
   useEffect(() => {
@@ -178,16 +196,15 @@ export const ExplorerPage: React.FC = () => {
       setNodes(subgraph.nodes);
       setEdges(subgraph.edges);
       setExpandedNodeIds(new Set([root.id]));
+      setSelectedNodeIds(new Set());
 
-      // Actualizar Motor Físico con los nuevos nodos y aristas
       physicsEngineRef.current?.updateGraph(subgraph.nodes, subgraph.edges, viewport.width, viewport.height);
-
-      // Centrar el viewport
       setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
     } else {
       setNodes([]);
       setEdges([]);
       setSelectedNode(null);
+      setSelectedNodeIds(new Set());
     }
   }, [graphDataService, workspaceService, viewport.width, viewport.height]);
 
@@ -208,7 +225,6 @@ export const ExplorerPage: React.FC = () => {
     };
   }, [executeSearch]);
 
-  // Actualizar el estado guardado del nodo seleccionado
   useEffect(() => {
     if (selectedNode) {
       void workspaceService.getSavedNodeIds().then((saved: string[]) => {
@@ -232,9 +248,9 @@ export const ExplorerPage: React.FC = () => {
     }
   }, []);
 
-  // Interacciones Táctiles / Drag & Drop Físico de Nodos y Paneo de Cámara
+  // Interacciones Táctiles / Drag & Drop Físico & Selección Múltiple (Con Shift o Clic)
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0) return; // Solo clic izquierdo para interactuar
     const canvas = canvasRef.current;
     if (!canvas || !physicsEngineRef.current) return;
 
@@ -259,11 +275,26 @@ export const ExplorerPage: React.FC = () => {
       const found = nodes.find(n => n.id === clickedNodeId);
       if (found) setSelectedNode(found);
 
-      // Iniciar Arrastre Físico del Nodo
+      // Selección Múltiple con Shift Key
+      if (e.shiftKey) {
+        setSelectedNodeIds(prev => {
+          const updated = new Set(prev);
+          if (updated.has(clickedNodeId!)) {
+            updated.delete(clickedNodeId!);
+          } else {
+            updated.add(clickedNodeId!);
+          }
+          return updated;
+        });
+      }
+
       setDraggedNodeId(clickedNodeId);
       physicsEngineRef.current.dragStart(clickedNodeId);
     } else {
-      // Iniciar Desplazamiento de Cámara (Pan)
+      // Paneo si se hace clic fuera de cualquier nodo (y no presiona Shift)
+      if (!e.shiftKey) {
+        setSelectedNodeIds(new Set());
+      }
       setIsPanning(true);
       setPanStart({ x: clickX - viewport.x, y: clickY - viewport.y });
     }
@@ -276,13 +307,11 @@ export const ExplorerPage: React.FC = () => {
     const currentY = e.clientY - rect.top;
 
     if (draggedNodeId && physicsEngineRef.current) {
-      // Arrastrar Nodo en Coordenadas del Mundo Físico
       const worldX = (currentX - viewport.x) / viewport.zoom;
       const worldY = (currentY - viewport.y) / viewport.zoom;
       physicsEngineRef.current.drag(draggedNodeId, worldX, worldY);
       renderFrame();
     } else if (isPanning) {
-      // Desplazar Cámara
       setViewport(prev => ({
         ...prev,
         x: currentX - panStart.x,
@@ -307,11 +336,53 @@ export const ExplorerPage: React.FC = () => {
     setViewport(prev => ({ ...prev, zoom: newZoom }));
   };
 
+  // Manejador del Clic Derecho para ContextMenu
+  const handleContextMenuTrigger = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !physicsEngineRef.current) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const worldX = (clickX - viewport.x) / viewport.zoom;
+    const worldY = (clickY - viewport.y) / viewport.zoom;
+
+    const positions = physicsEngineRef.current.getPositions();
+    let clickedNodeId: string | null = null;
+
+    positions.forEach((pos, id) => {
+      const dist = Math.hypot(pos.x - worldX, pos.y - worldY);
+      if (dist <= 28) {
+        clickedNodeId = id;
+      }
+    });
+
+    if (clickedNodeId) {
+      const found = nodes.find(n => n.id === clickedNodeId);
+      setContextMenuTargetNode(found || null);
+      // Agregar automáticamente a la selección múltiple
+      setSelectedNodeIds(prev => new Set(prev).add(clickedNodeId!));
+    } else {
+      setContextMenuTargetNode(null);
+    }
+  };
+
+  // Capturar Imagen del Lienzo (Tomar Foto)
+  const handleTakeSnapshot = () => {
+    if (!canvasRef.current) return;
+    const imageURI = canvasRef.current.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `optimuskg-pizarra-${Date.now()}.png`;
+    link.href = imageURI;
+    link.click();
+  };
+
   const handleZoomIn = () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 3) }));
   const handleZoomOut = () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom * 0.8, 0.3) }));
   const handleResetPan = () => setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
 
-  // Modal para agregar subgrafo a colección
+  // Modal para agregar subgrafo o nodos seleccionados a colección
   const loadCollectionsForModal = useCallback(async () => {
     const cols = await workspaceService.getCollections();
     setCollections(cols);
@@ -329,11 +400,18 @@ export const ExplorerPage: React.FC = () => {
   const handleAddGraphToCollection = async () => {
     if (!targetCollectionId) return;
 
-    for (const node of nodes) {
+    // Si hay una selección múltiple activa, guardar sólo los seleccionados. Sino, guardar todo el subgrafo.
+    const targetNodes = selectedNodeIds.size > 0
+      ? nodes.filter(n => selectedNodeIds.has(n.id))
+      : nodes;
+
+    for (const node of targetNodes) {
       await workspaceService.addNodeToCollection(targetCollectionId, node.id);
     }
     for (const edge of edges) {
-      await workspaceService.addEdgeToCollection(targetCollectionId, edge.id);
+      if (selectedNodeIds.size === 0 || (selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target))) {
+        await workspaceService.addEdgeToCollection(targetCollectionId, edge.id);
+      }
     }
 
     setAddedSuccess(true);
@@ -351,19 +429,77 @@ export const ExplorerPage: React.FC = () => {
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-white overflow-hidden select-none">
-      {/* Canvas Fullscreen con Pizarra de Física Automática en Vivo */}
-      <canvas
-        ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        className="w-full h-full cursor-grab active:cursor-grabbing block"
-      />
+      {/* ContextMenu de Pizarra Excalidraw */}
+      <ContextMenu>
+        <ContextMenuTrigger className="w-full h-full block">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+            onContextMenu={handleContextMenuTrigger}
+            className="w-full h-full cursor-grab active:cursor-grabbing block"
+          />
+        </ContextMenuTrigger>
+
+        {/* Menú Desplegable de Clic Derecho en la Pizarra vs en Nodos */}
+        <ContextMenuContent className="w-64 bg-white border border-border rounded-xl p-2 shadow-2xl z-50">
+          {contextMenuTargetNode ? (
+            <>
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-base font-bold text-slate-900">{contextMenuTargetNode.name}</p>
+                <Badge variant="secondary" className="text-base font-medium mt-1">{contextMenuTargetNode.label}</Badge>
+              </div>
+              <ContextMenuItem
+                onClick={async () => {
+                  await workspaceService.toggleSaveNode(contextMenuTargetNode.id);
+                  setIsSaved(true);
+                }}
+                className="gap-2 text-base font-medium cursor-pointer"
+              >
+                <BookmarkSimple size={18} />
+                Guardar Nodo en Workspace
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleOpenAddToCol} className="gap-2 text-base font-medium cursor-pointer">
+                <Bookmarks size={18} />
+                Añadir Selección a Colección ({selectedNodeIds.size || 1})
+              </ContextMenuItem>
+            </>
+          ) : (
+            <>
+              <div className="px-3 py-2 text-base font-semibold text-muted-foreground uppercase tracking-wider">
+                Acciones de Pizarra
+              </div>
+              <ContextMenuItem onClick={handleZoomIn} className="gap-2 text-base font-medium cursor-pointer">
+                <MagnifyingGlassPlus size={18} />
+                Acercar (Zoom In)
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleZoomOut} className="gap-2 text-base font-medium cursor-pointer">
+                <MagnifyingGlassMinus size={18} />
+                Alejar (Zoom Out)
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleResetPan} className="gap-2 text-base font-medium cursor-pointer">
+                <ArrowsOut size={18} />
+                Centrar Vista de Pizarra
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={handleTakeSnapshot} className="gap-2 text-base font-medium cursor-pointer">
+                <Camera size={18} className="text-primary" />
+                Tomar Foto / Exportar PNG
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleOpenAddToCol} className="gap-2 text-base font-medium cursor-pointer">
+                <Bookmarks size={18} />
+                Guardar Nodos Seleccionados ({selectedNodeIds.size || nodes.length})
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Barra Flotante Superior: Buscador y Controles */}
-      <div className="absolute top-4 left-4 right-4 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
+      <div className="absolute top-4 left-4 right-4 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none z-10">
         <form onSubmit={handleSearchForm} className="flex gap-2 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
           <Input
             type="text"
@@ -382,6 +518,12 @@ export const ExplorerPage: React.FC = () => {
           {loadingNeighbors && (
             <Badge variant="secondary" className="gap-2 text-base animate-pulse">
               <Sparkle size={14} className="animate-spin text-primary" /> Auto-organizándose...
+            </Badge>
+          )}
+
+          {selectedNodeIds.size > 0 && (
+            <Badge variant="outline" className="gap-2 text-base font-semibold border-primary text-primary">
+              <CheckSquare size={16} /> {selectedNodeIds.size} Nodos Seleccionados
             </Badge>
           )}
 
@@ -413,7 +555,7 @@ export const ExplorerPage: React.FC = () => {
 
       {/* Panel Flotante Lateral de Inspección de Nodo Seleccionado */}
       {selectedNode && (
-        <div className="absolute top-20 right-4 w-80 bg-white/95 backdrop-blur border border-border rounded-xl p-5 shadow-2xl space-y-4">
+        <div className="absolute top-20 right-4 w-80 bg-white/95 backdrop-blur border border-border rounded-xl p-5 shadow-2xl space-y-4 z-10">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <Badge variant="secondary" className="text-base font-medium">
               {selectedNode.label}
@@ -450,8 +592,12 @@ export const ExplorerPage: React.FC = () => {
         </div>
       )}
 
-      {/* Controles Flotantes de Zoom y Paneo Estilo Excalidraw (Abajo a la Derecha) */}
-      <div className="absolute bottom-6 right-6 bg-white/95 backdrop-blur border border-border rounded-xl p-2 flex items-center gap-2 shadow-xl">
+      {/* Controles Flotantes de Zoom, Paneo y Tomar Foto (Abajo a la Derecha) */}
+      <div className="absolute bottom-6 right-6 bg-white/95 backdrop-blur border border-border rounded-xl p-2 flex items-center gap-2 shadow-xl z-10">
+        <Button variant="ghost" size="icon" onClick={handleTakeSnapshot} title="Tomar Foto de Pizarra (Exportar PNG)">
+          <Camera size={18} className="text-primary" />
+        </Button>
+        <div className="w-px h-5 bg-border mx-1" />
         <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Alejar (Zoom Out)">
           <Minus size={18} />
         </Button>
@@ -467,11 +613,13 @@ export const ExplorerPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Indicador Flotante de Paneo e Interactividad Físico (Abajo a la Izquierda) */}
-      <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur border border-border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-md">
+      {/* Indicador Flotante de Paneo y Selección Múltiple (Abajo a la Izquierda) */}
+      <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur border border-border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-md z-10">
         <Hand size={18} className="text-primary" />
         <span className="text-base text-slate-600 font-medium">
-          Arrastra nodos o desplázate • {nodes.length} Nodos Auto-Organizados
+          {selectedNodeIds.size > 0
+            ? `${selectedNodeIds.size} Nodos Seleccionados (Shift+Clic para sumar/restar)`
+            : 'Arrastra nodos • Shift+Clic para Selección Múltiple'}
         </span>
       </div>
 
@@ -481,7 +629,7 @@ export const ExplorerPage: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-xl">Guardar Grafo en Colección</DialogTitle>
             <DialogDescription className="text-base">
-              Guarda los {nodes.length} nodos y {edges.length} aristas de la pizarra en una colección.
+              Guarda los {selectedNodeIds.size > 0 ? selectedNodeIds.size : nodes.length} nodos en una colección específica.
             </DialogDescription>
           </DialogHeader>
 

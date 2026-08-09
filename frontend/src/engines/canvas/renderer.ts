@@ -6,6 +6,7 @@ export interface RenderConfig {
   nodeRadius: number;
   showLabels: boolean;
   selectedNodeId?: string | null;
+  selectedNodeIds?: Set<string>;
 }
 
 export function renderGraphToCanvas(
@@ -60,7 +61,7 @@ export function renderGraphToCanvas(
     const pos = positions.get(node.id);
     if (!pos) return;
 
-    const isSelected = config.selectedNodeId === node.id;
+    const isSelected = config.selectedNodeId === node.id || config.selectedNodeIds?.has(node.id);
     const radius = isSelected ? config.nodeRadius + 4 : config.nodeRadius;
 
     // Sombra proyectada suave estilo Excalidraw
@@ -74,9 +75,20 @@ export function renderGraphToCanvas(
     ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
     ctx.fillStyle = getNodeColor(node.label);
     ctx.fill();
-    ctx.lineWidth = isSelected ? 3.5 : 2;
+    ctx.lineWidth = isSelected ? 4 : 2;
     ctx.strokeStyle = isSelected ? '#0284c7' : '#ffffff'; // sky-600 al seleccionar
     ctx.stroke();
+
+    // Anillo de Selección Múltiple (Si está en el Set de selección)
+    if (config.selectedNodeIds?.has(node.id)) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius + 5, 0, 2 * Math.PI);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset
+    }
 
     // Nombre y Etiqueta del Nodo (Alta legibilidad sobre fondo blanco)
     if (config.showLabels) {
@@ -113,7 +125,6 @@ function drawExcalidrawGrid(ctx: CanvasRenderingContext2D, viewport: Viewport): 
   ctx.restore();
 }
 
-// Paleta de Colores del Proyecto (Harmonious Tailored Colors)
 function getNodeColor(label: string): string {
   switch (label) {
     case 'Gene': return '#2563eb';           // Azul primario genómico
