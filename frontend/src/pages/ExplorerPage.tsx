@@ -17,6 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Slider } from '@/components/ui/slider';
 import {
   MagnifyingGlass,
   BookmarkSimple,
@@ -29,8 +30,6 @@ import {
   ArrowsOut,
   Sparkle,
   X,
-  Play,
-  Pause,
 } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
@@ -42,7 +41,7 @@ export const ExplorerPage: React.FC = () => {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isSaved, setIsSaved] = useState<boolean>(false);
-  const [isSimulating, setIsSimulating] = useState<boolean>(true);
+  const [nodeDistance, setNodeDistance] = useState<number>(140);
 
   // Instancia Persistente del Motor Físico D3 (Inicialización segura)
   const physicsEngineRef = useRef<ForceGraphPhysicsEngine | null>(null);
@@ -392,14 +391,25 @@ export const ExplorerPage: React.FC = () => {
             Guardar Grafo
           </Button>
 
-          <Button
-            variant="outline"
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="gap-2 text-base font-medium"
-          >
-            {isSimulating ? <Pause size={18} /> : <Play size={18} />}
-            {isSimulating ? 'Pausar Física' : 'Activar Física'}
-          </Button>
+          {/* Regulador de Distancia entre Nodos */}
+          <div className="flex items-center gap-3 bg-white px-3 py-1.5 border border-border rounded-lg">
+            <span className="text-base font-medium text-foreground whitespace-nowrap">Distancia Nodos:</span>
+            <Slider
+              value={[nodeDistance]}
+              min={60}
+              max={350}
+              step={10}
+              onValueChange={(val) => {
+                const dist = Array.isArray(val) ? val[0] : (val as unknown as number);
+                if (typeof dist === 'number') {
+                  setNodeDistance(dist);
+                  physicsEngineRef.current?.setDistance(dist);
+                }
+              }}
+              className="w-32 cursor-pointer"
+            />
+            <span className="text-base font-mono text-muted-foreground w-12">{nodeDistance}px</span>
+          </div>
         </div>
       </div>
 

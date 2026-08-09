@@ -48,17 +48,27 @@ export class ForceGraphPhysicsEngine {
     });
   }
 
+  public setDistance(distance: number): void {
+    const linkForce = this.simulation.force<d3.ForceLink<PhysicsNode, PhysicsLink>>('link');
+    if (linkForce) {
+      linkForce.distance(distance);
+    }
+    const chargeForce = this.simulation.force<d3.ForceManyBody<PhysicsNode>>('charge');
+    if (chargeForce) {
+      chargeForce.strength(-distance * 2.5);
+    }
+    this.simulation.alpha(0.3).restart();
+  }
+
   public updateGraph(nodes: GraphNode[], edges: GraphEdge[], width: number, height: number): void {
     const currentPhysicsNodes = this.simulation.nodes();
     const existingMap = new Map<string, PhysicsNode>(currentPhysicsNodes.map(n => [n.id, n]));
 
-    // 1. Mapear nodos manteniendo posiciones existentes para animación fluida
     const newPhysicsNodes: PhysicsNode[] = nodes.map((node, idx) => {
       const existing = existingMap.get(node.id);
       if (existing) {
         return existing;
       } else {
-        // Inicializar cerca del centro con pequeña varianza
         const angle = idx * 0.5;
         const radius = 50 + (idx % 5) * 20;
         return {
@@ -73,7 +83,6 @@ export class ForceGraphPhysicsEngine {
 
     this.nodesMap = new Map(newPhysicsNodes.map(n => [n.id, n]));
 
-    // 2. Mapear aristas (links)
     const newLinks: PhysicsLink[] = edges
       .filter(e => this.nodesMap.has(e.source) && this.nodesMap.has(e.target))
       .map(e => ({
@@ -85,7 +94,6 @@ export class ForceGraphPhysicsEngine {
 
     this.links = newLinks;
 
-    // 3. Actualizar fuerzas de la simulación
     this.simulation.nodes(newPhysicsNodes);
 
     const linkForce = this.simulation.force<d3.ForceLink<PhysicsNode, PhysicsLink>>('link');
@@ -98,7 +106,6 @@ export class ForceGraphPhysicsEngine {
       centerForce.x(width / 2).y(height / 2);
     }
 
-    // Reiniciar alfa para que los nuevos nodos se acomoden suavemente
     this.simulation.alpha(0.3).restart();
   }
 
