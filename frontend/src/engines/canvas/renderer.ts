@@ -2,11 +2,19 @@ import type { GraphNode, GraphEdge } from '../../types';
 import type { NodePosition } from './layout';
 import type { Viewport } from './culling';
 
+export interface SelectionBox {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+}
+
 export interface RenderConfig {
   nodeRadius: number;
   showLabels: boolean;
   selectedNodeId?: string | null;
   selectedNodeIds?: Set<string>;
+  selectionBox?: SelectionBox | null;
 }
 
 export function renderGraphToCanvas(
@@ -104,6 +112,25 @@ export function renderGraphToCanvas(
   });
 
   ctx.restore();
+
+  // 4. Renderizar Caja de Selección (Marquee Box Estilo Figma/Excalidraw) en Coordenadas de Pantalla
+  if (config.selectionBox) {
+    const { startX, startY, currentX, currentY } = config.selectionBox;
+    const x = Math.min(startX, currentX);
+    const y = Math.min(startY, currentY);
+    const width = Math.abs(currentX - startX);
+    const height = Math.abs(currentY - startY);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(14, 165, 233, 0.12)'; // sky-500 translúcido
+    ctx.strokeStyle = '#0284c7'; // sky-600
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x, y, width, height);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 

@@ -4,7 +4,7 @@ import type { GraphNode, GraphEdge, Collection } from '../types';
 import { ForceGraphPhysicsEngine } from '../engines/canvas/ForceGraphPhysicsEngine';
 import { cullNodes } from '../engines/canvas/culling';
 import type { Viewport } from '../engines/canvas/culling';
-import { renderGraphToCanvas } from '../engines/canvas/renderer';
+import { renderGraphToCanvas, type SelectionBox } from '../engines/canvas/renderer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -46,7 +46,7 @@ import {
   Sliders,
 } from '@phosphor-icons/react';
 
-export type CanvasInteractionMode = 'pan' | 'select';
+export type CanvasInteractionMode = 'select' | 'pan';
 
 export const ExplorerPage: React.FC = () => {
   const { graphDataService, workspaceService } = useDomainServices();
@@ -57,14 +57,21 @@ export const ExplorerPage: React.FC = () => {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   
-  // Selección Múltiple de Nodos y Modo Activo
+  // Modo de Interacción (Por Defecto: 'select') y Selección Múltiple
+  const [activeMode, setActiveMode] = useState<CanvasInteractionMode>('select');
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
-  const [activeMode, setActiveMode] = useState<CanvasInteractionMode>('pan');
+  
+  // Caja de Selección Marquee (Click & Drag en el fondo)
+  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
+  const [isSelecting, setIsSelecting] = useState<boolean>(false);
   
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [nodeDistance, setNodeDistance] = useState<number>(140);
 
-  // Context Menu State (Lienzo vs Nodo)
+  // Tecla Espacio o Rueda Mantenida para Paneo Temporal Estilo Figma/Excalidraw
+  const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
+
+  // Context Menu State
   const [contextMenuTargetNode, setContextMenuTargetNode] = useState<GraphNode | null>(null);
 
   // Instancia Persistente del Motor Físico D3
@@ -99,6 +106,28 @@ export const ExplorerPage: React.FC = () => {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Detectar Atajos de Teclado (Tecla Espacio Mantenida para Paneo Temporal)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !isSpacePressed && document.activeElement?.tagName !== 'INPUT') {
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isSpacePressed]);
 
   // Expansión Automática de Nodos al Desplazarte
   const expandVisibleNodesNeighbors = useCallback(async (visibleIds: Set<string>) => {
@@ -171,10 +200,11 @@ export const ExplorerPage: React.FC = () => {
       showLabels: true,
       selectedNodeId: selectedNode?.id,
       selectedNodeIds: selectedNodeIds,
+      selectionBox: selectionBox,
     });
 
     void expandVisibleNodesNeighbors(visibleIds);
-  }, [nodes, edges, viewport, selectedNode, selectedNodeIds, expandVisibleNodesNeighbors]);
+  }, [nodes, edges, viewport, selectedNode, selectedNodeIds, selectionBox, expandVisibleNodesNeighbors]);
 
   // Suscribir callback de tick de la física D3
   useEffect(() => {
@@ -255,15 +285,23 @@ export const ExplorerPage: React.FC = () => {
     }
   }, []);
 
-  // Interacciones Táctiles / Drag & Drop Físico & Selección Múltiple
+  // Manejo de Interacción del Ratón (Clic Central / Rueda / Espacio / Marquee Selection)
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return; // Solo clic izquierdo para interactuar
     const canvas = canvasRef.current;
     if (!canvas || !physicsEngineRef.current) return;
 
     const rect = canvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
+
+    // 1. Paneo con Clic Central (Boton 1), Tecla Espacio Mantenida, o Modo Paneo explícito
+    if (e.button === 1 || isSpacePressed || (activeMode === 'pan' && e.button === 0)) {
+      setIsPanning(true);
+      setPanStart({ x: clickX - viewport.x, y: clickY - viewport.y });
+      return;
+    }
+
+    if (e.button !== 0) return; // Ignorar otros botones (ej. Clic Derecho manejado por ContextMenu)
 
     const worldX = (clickX - viewport.x) / viewport.zoom;
     const worldY = (clickY - viewport.y) / viewport.zoom;
@@ -282,8 +320,8 @@ export const ExplorerPage: React.FC = () => {
       const found = nodes.find(n => n.id === clickedNodeId);
       if (found) setSelectedNode(found);
 
-      // Si el modo es selección o tiene Shift presionado
-      if (activeMode === 'select' || e.shiftKey) {
+      // Selección individual / múltiple con Shift
+      if (e.shiftKey) {
         setSelectedNodeIds(prev => {
           const updated = new Set(prev);
           if (updated.has(clickedNodeId!)) {
@@ -293,17 +331,21 @@ export const ExplorerPage: React.FC = () => {
           }
           return updated;
         });
+      } else if (!selectedNodeIds.has(clickedNodeId)) {
+        setSelectedNodeIds(new Set([clickedNodeId]));
       }
 
       setDraggedNodeId(clickedNodeId);
       physicsEngineRef.current.dragStart(clickedNodeId);
     } else {
-      // Paneo si se hace clic fuera de cualquier nodo
-      if (activeMode === 'pan' && !e.shiftKey) {
-        setSelectedNodeIds(new Set());
+      // Clic en el Fondo en Modo Selección -> Iniciar Rectángulo de Selección Marquee Box
+      if (activeMode === 'select') {
+        if (!e.shiftKey) {
+          setSelectedNodeIds(new Set());
+        }
+        setIsSelecting(true);
+        setSelectionBox({ startX: clickX, startY: clickY, currentX: clickX, currentY: clickY });
       }
-      setIsPanning(true);
-      setPanStart({ x: clickX - viewport.x, y: clickY - viewport.y });
     }
   };
 
@@ -314,11 +356,38 @@ export const ExplorerPage: React.FC = () => {
     const currentY = e.clientY - rect.top;
 
     if (draggedNodeId && physicsEngineRef.current) {
+      // Arrastrar Nodo en Coordenadas Físicas
       const worldX = (currentX - viewport.x) / viewport.zoom;
       const worldY = (currentY - viewport.y) / viewport.zoom;
       physicsEngineRef.current.drag(draggedNodeId, worldX, worldY);
       renderFrame();
+    } else if (isSelecting && selectionBox && physicsEngineRef.current) {
+      // Actualizar Rectángulo de Selección Marquee Box
+      const updatedBox = { ...selectionBox, currentX, currentY };
+      setSelectionBox(updatedBox);
+
+      // Calcular Nodos Abarcados por el Rectángulo
+      const xMin = Math.min(updatedBox.startX, currentX);
+      const xMax = Math.max(updatedBox.startX, currentX);
+      const yMin = Math.min(updatedBox.startY, currentY);
+      const yMax = Math.max(updatedBox.startY, currentY);
+
+      const positions = physicsEngineRef.current.getPositions();
+      const newlySelected = new Set<string>(e.shiftKey ? selectedNodeIds : []);
+
+      positions.forEach((pos, id) => {
+        const screenX = pos.x * viewport.zoom + viewport.x;
+        const screenY = pos.y * viewport.zoom + viewport.y;
+
+        if (screenX >= xMin && screenX <= xMax && screenY >= yMin && screenY <= yMax) {
+          newlySelected.add(id);
+        }
+      });
+
+      setSelectedNodeIds(newlySelected);
+      renderFrame();
     } else if (isPanning) {
+      // Paneo de Cámara
       setViewport(prev => ({
         ...prev,
         x: currentX - panStart.x,
@@ -332,6 +401,8 @@ export const ExplorerPage: React.FC = () => {
       physicsEngineRef.current.dragEnd(draggedNodeId);
       setDraggedNodeId(null);
     }
+    setIsSelecting(false);
+    setSelectionBox(null);
     setIsPanning(false);
   };
 
@@ -445,11 +516,13 @@ export const ExplorerPage: React.FC = () => {
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
             onContextMenu={handleContextMenuTrigger}
-            className="w-full h-full cursor-grab active:cursor-grabbing block"
+            className={`w-full h-full block ${
+              isPanning || isSpacePressed ? 'cursor-grabbing' : activeMode === 'select' ? 'cursor-crosshair' : 'cursor-grab'
+            }`}
           />
         </ContextMenuTrigger>
 
-        {/* Menú Desplegable de Clic Derecho en la Pizarra vs en Nodos */}
+        {/* Menú Desplegable de Clic Derecho */}
         <ContextMenuContent className="w-64 bg-white border border-border rounded-xl p-2 shadow-2xl z-50">
           {contextMenuTargetNode ? (
             <>
@@ -503,7 +576,7 @@ export const ExplorerPage: React.FC = () => {
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Barra Flotante Superior: Buscador y Desplegable de Configuración */}
+      {/* Barra Flotante Superior: Buscador y Popover de Configuración con Ícono Animado */}
       <div className="absolute top-4 left-4 right-4 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none z-10">
         <form onSubmit={handleSearchForm} className="flex gap-2 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
           <Input
@@ -638,35 +711,38 @@ export const ExplorerPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Barra Inferior de Conjunto de Modos Disponibles (Abajo a la Izquierda) */}
+      {/* Barra Minimalista de Modos con Íconos (Abajo a la Izquierda) */}
       <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur border border-border rounded-xl p-2 flex items-center gap-2 shadow-xl z-10">
         <Button
-          variant={activeMode === 'pan' ? "default" : "ghost"}
-          onClick={() => setActiveMode('pan')}
-          className="gap-2 text-base font-medium"
-        >
-          <Hand size={18} />
-          Modo Desplazamiento
-        </Button>
-        
-        <Button
           variant={activeMode === 'select' ? "default" : "ghost"}
+          size="icon"
           onClick={() => setActiveMode('select')}
-          className="gap-2 text-base font-medium"
+          title="Modo Selección Marquee Box (Por Defecto)"
         >
-          <Selection size={18} />
-          Modo Selección ({selectedNodeIds.size})
+          <Selection size={20} />
+        </Button>
+
+        <Button
+          variant={activeMode === 'pan' ? "default" : "ghost"}
+          size="icon"
+          onClick={() => setActiveMode('pan')}
+          title="Modo Desplazamiento (O mantén presionada la Rueda/Espacio)"
+        >
+          <Hand size={20} />
         </Button>
 
         {selectedNodeIds.size > 0 && (
-          <Button
-            variant="outline"
-            onClick={handleOpenAddToCol}
-            className="gap-2 text-base font-medium text-primary border-primary"
-          >
-            <Bookmarks size={18} />
-            Guardar ({selectedNodeIds.size}) en Colección
-          </Button>
+          <>
+            <div className="w-px h-5 bg-border mx-1" />
+            <Button
+              variant="outline"
+              onClick={handleOpenAddToCol}
+              className="gap-2 text-base font-medium text-primary border-primary"
+            >
+              <Bookmarks size={18} />
+              Guardar ({selectedNodeIds.size})
+            </Button>
+          </>
         )}
       </div>
 
