@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,12 @@ import {
   MagnifyingGlassPlus,
   MagnifyingGlassMinus,
   CheckSquare,
+  Gear,
+  Selection,
+  Sliders,
 } from '@phosphor-icons/react';
+
+export type CanvasInteractionMode = 'pan' | 'select';
 
 export const ExplorerPage: React.FC = () => {
   const { graphDataService, workspaceService } = useDomainServices();
@@ -51,8 +57,9 @@ export const ExplorerPage: React.FC = () => {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   
-  // Selección Múltiple de Nodos
+  // Selección Múltiple de Nodos y Modo Activo
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [activeMode, setActiveMode] = useState<CanvasInteractionMode>('pan');
   
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [nodeDistance, setNodeDistance] = useState<number>(140);
@@ -248,7 +255,7 @@ export const ExplorerPage: React.FC = () => {
     }
   }, []);
 
-  // Interacciones Táctiles / Drag & Drop Físico & Selección Múltiple (Con Shift o Clic)
+  // Interacciones Táctiles / Drag & Drop Físico & Selección Múltiple
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return; // Solo clic izquierdo para interactuar
     const canvas = canvasRef.current;
@@ -275,8 +282,8 @@ export const ExplorerPage: React.FC = () => {
       const found = nodes.find(n => n.id === clickedNodeId);
       if (found) setSelectedNode(found);
 
-      // Selección Múltiple con Shift Key
-      if (e.shiftKey) {
+      // Si el modo es selección o tiene Shift presionado
+      if (activeMode === 'select' || e.shiftKey) {
         setSelectedNodeIds(prev => {
           const updated = new Set(prev);
           if (updated.has(clickedNodeId!)) {
@@ -291,8 +298,8 @@ export const ExplorerPage: React.FC = () => {
       setDraggedNodeId(clickedNodeId);
       physicsEngineRef.current.dragStart(clickedNodeId);
     } else {
-      // Paneo si se hace clic fuera de cualquier nodo (y no presiona Shift)
-      if (!e.shiftKey) {
+      // Paneo si se hace clic fuera de cualquier nodo
+      if (activeMode === 'pan' && !e.shiftKey) {
         setSelectedNodeIds(new Set());
       }
       setIsPanning(true);
@@ -361,7 +368,6 @@ export const ExplorerPage: React.FC = () => {
     if (clickedNodeId) {
       const found = nodes.find(n => n.id === clickedNodeId);
       setContextMenuTargetNode(found || null);
-      // Agregar automáticamente a la selección múltiple
       setSelectedNodeIds(prev => new Set(prev).add(clickedNodeId!));
     } else {
       setContextMenuTargetNode(null);
@@ -400,7 +406,6 @@ export const ExplorerPage: React.FC = () => {
   const handleAddGraphToCollection = async () => {
     if (!targetCollectionId) return;
 
-    // Si hay una selección múltiple activa, guardar sólo los seleccionados. Sino, guardar todo el subgrafo.
     const targetNodes = selectedNodeIds.size > 0
       ? nodes.filter(n => selectedNodeIds.has(n.id))
       : nodes;
@@ -498,7 +503,7 @@ export const ExplorerPage: React.FC = () => {
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Barra Flotante Superior: Buscador y Controles */}
+      {/* Barra Flotante Superior: Buscador y Desplegable de Configuración */}
       <div className="absolute top-4 left-4 right-4 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none z-10">
         <form onSubmit={handleSearchForm} className="flex gap-2 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
           <Input
@@ -523,33 +528,53 @@ export const ExplorerPage: React.FC = () => {
 
           {selectedNodeIds.size > 0 && (
             <Badge variant="outline" className="gap-2 text-base font-semibold border-primary text-primary">
-              <CheckSquare size={16} /> {selectedNodeIds.size} Nodos Seleccionados
+              <CheckSquare size={16} /> {selectedNodeIds.size} Seleccionados
             </Badge>
           )}
 
-          <Button onClick={handleOpenAddToCol} variant="secondary" className="gap-2 text-base font-medium">
-            <Bookmarks size={18} />
-            Guardar Grafo
-          </Button>
+          {/* Menú Desplegable con Ícono Config (Popover que se desliza suavemente) */}
+          <Popover>
+            <PopoverTrigger
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background p-2 hover:bg-accent hover:text-accent-foreground hover:scale-105 transition-all cursor-pointer"
+              title="Configuración de Pizarra"
+            >
+              <Gear size={20} className="text-slate-700 hover:rotate-90 transition-transform duration-300" />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-4 bg-white border border-border rounded-xl shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <div className="flex items-center gap-2 font-bold text-base text-slate-900">
+                  <Sliders size={18} className="text-primary" /> Configuración de Pizarra
+                </div>
+              </div>
 
-          {/* Regulador de Distancia entre Nodos */}
-          <div className="flex items-center gap-3 bg-white px-3 py-1.5 border border-border rounded-lg">
-            <span className="text-base font-medium text-foreground whitespace-nowrap">Distancia Nodos:</span>
-            <input
-              type="range"
-              min={60}
-              max={350}
-              step={10}
-              value={nodeDistance}
-              onChange={(e) => {
-                const dist = Number(e.target.value);
-                setNodeDistance(dist);
-                physicsEngineRef.current?.setDistance(dist);
-              }}
-              className="w-32 cursor-pointer accent-primary h-2 bg-slate-200 rounded-lg appearance-none"
-            />
-            <span className="text-base font-mono text-muted-foreground w-14">{nodeDistance}px</span>
-          </div>
+              {/* Regulador de Distancia entre Nodos */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-base font-medium text-slate-800">
+                  <span>Distancia entre Nodos:</span>
+                  <span className="font-mono text-muted-foreground">{nodeDistance}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={60}
+                  max={350}
+                  step={10}
+                  value={nodeDistance}
+                  onChange={(e) => {
+                    const dist = Number(e.target.value);
+                    setNodeDistance(dist);
+                    physicsEngineRef.current?.setDistance(dist);
+                  }}
+                  className="w-full cursor-pointer accent-primary h-2 bg-slate-200 rounded-lg appearance-none"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-border flex flex-col gap-2">
+                <Button onClick={handleTakeSnapshot} variant="secondary" className="w-full gap-2 text-base font-medium">
+                  <Camera size={18} /> Tomar Foto / Exportar PNG
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -613,21 +638,43 @@ export const ExplorerPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Indicador Flotante de Paneo y Selección Múltiple (Abajo a la Izquierda) */}
-      <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur border border-border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-md z-10">
-        <Hand size={18} className="text-primary" />
-        <span className="text-base text-slate-600 font-medium">
-          {selectedNodeIds.size > 0
-            ? `${selectedNodeIds.size} Nodos Seleccionados (Shift+Clic para sumar/restar)`
-            : 'Arrastra nodos • Shift+Clic para Selección Múltiple'}
-        </span>
+      {/* Barra Inferior de Conjunto de Modos Disponibles (Abajo a la Izquierda) */}
+      <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur border border-border rounded-xl p-2 flex items-center gap-2 shadow-xl z-10">
+        <Button
+          variant={activeMode === 'pan' ? "default" : "ghost"}
+          onClick={() => setActiveMode('pan')}
+          className="gap-2 text-base font-medium"
+        >
+          <Hand size={18} />
+          Modo Desplazamiento
+        </Button>
+        
+        <Button
+          variant={activeMode === 'select' ? "default" : "ghost"}
+          onClick={() => setActiveMode('select')}
+          className="gap-2 text-base font-medium"
+        >
+          <Selection size={18} />
+          Modo Selección ({selectedNodeIds.size})
+        </Button>
+
+        {selectedNodeIds.size > 0 && (
+          <Button
+            variant="outline"
+            onClick={handleOpenAddToCol}
+            className="gap-2 text-base font-medium text-primary border-primary"
+          >
+            <Bookmarks size={18} />
+            Guardar ({selectedNodeIds.size}) en Colección
+          </Button>
+        )}
       </div>
 
       {/* Modal para Añadir Grafo a Colección */}
       <Dialog open={isAddToColOpen} onOpenChange={setIsAddToColOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl">Guardar Grafo en Colección</DialogTitle>
+            <DialogTitle className="text-xl">Guardar en Colección</DialogTitle>
             <DialogDescription className="text-base">
               Guarda los {selectedNodeIds.size > 0 ? selectedNodeIds.size : nodes.length} nodos en una colección específica.
             </DialogDescription>
@@ -659,7 +706,7 @@ export const ExplorerPage: React.FC = () => {
             {addedSuccess && (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-md flex items-center gap-2 text-base font-medium">
                 <Check size={20} />
-                ¡Grafo agregado a la colección exitosamente!
+                ¡Agregado a la colección exitosamente!
               </div>
             )}
           </div>
@@ -674,7 +721,7 @@ export const ExplorerPage: React.FC = () => {
               disabled={collections.length === 0 || addedSuccess}
               className="gap-2 text-base font-medium"
             >
-              Guardar Grafo
+              Guardar en Colección
             </Button>
           </DialogFooter>
         </DialogContent>
