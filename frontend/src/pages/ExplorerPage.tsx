@@ -427,24 +427,37 @@ export const ExplorerPage: React.FC = () => {
     setIsPanning(false);
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
+  // Prevenir zoom por defecto del navegador en Ctrl+Wheel usando un listener nativo no-pasivo
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    if (e.ctrlKey || e.metaKey) {
-      // 1. Ctrl + Rueda: Zoom In / Zoom Out
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      const newZoom = Math.min(Math.max(viewport.zoom * zoomFactor, 0.3), 3);
-      setViewport(prev => ({ ...prev, zoom: newZoom }));
-    } else if (e.shiftKey) {
-      // 2. Shift + Rueda: Paneo Horizontal (Eje X)
-      const panSpeed = 1.2;
-      setViewport(prev => ({ ...prev, x: prev.x - e.deltaY * panSpeed }));
-    } else {
-      // 3. Rueda Solamente: Paneo Vertical (Eje Y)
-      const panSpeed = 1.2;
-      setViewport(prev => ({ ...prev, y: prev.y - e.deltaY * panSpeed }));
-    }
-  };
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      if (e.ctrlKey || e.metaKey) {
+        // 1. Ctrl + Rueda: Zoom In / Zoom Out
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        setViewport(prev => {
+          const newZoom = Math.min(Math.max(prev.zoom * zoomFactor, 0.3), 3);
+          return { ...prev, zoom: newZoom };
+        });
+      } else if (e.shiftKey) {
+        // 2. Shift + Rueda: Paneo Horizontal (Eje X)
+        const panSpeed = 1.2;
+        setViewport(prev => ({ ...prev, x: prev.x - e.deltaY * panSpeed }));
+      } else {
+        // 3. Rueda Solamente: Paneo Vertical (Eje Y)
+        const panSpeed = 1.2;
+        setViewport(prev => ({ ...prev, y: prev.y - e.deltaY * panSpeed }));
+      }
+    };
+
+    canvas.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, []);
 
   // Manejador del Clic Derecho para ContextMenu
   const handleContextMenuTrigger = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -546,7 +559,6 @@ export const ExplorerPage: React.FC = () => {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            onWheel={handleWheel}
             onContextMenu={handleContextMenuTrigger}
             className={`w-full h-full block ${
               isPanning || isSpacePressed ? 'cursor-grabbing' : activeMode === 'select' ? 'cursor-crosshair' : 'cursor-grab'
