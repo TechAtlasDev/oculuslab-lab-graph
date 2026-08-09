@@ -46,6 +46,7 @@ export class LocalStorageWorkspaceRepository implements IWorkspaceRepository {
         id: 'col-default',
         name: 'Oncology Targets',
         description: 'Key genes associated with cancer research',
+        icon: 'Dna',
         nodeIds: ['node-1', 'node-3', 'node-6'],
         edgeIds: ['edge-2', 'edge-5'],
         createdAt: new Date().toISOString(),
@@ -59,12 +60,19 @@ export class LocalStorageWorkspaceRepository implements IWorkspaceRepository {
     return collections.find(c => c.id === collectionId) || null;
   }
 
-  async createCollection(name: string, description?: string, initialNodeIds: string[] = [], initialEdgeIds: string[] = []): Promise<Collection> {
+  async createCollection(
+    name: string, 
+    description?: string, 
+    icon?: string, 
+    initialNodeIds: string[] = [], 
+    initialEdgeIds: string[] = []
+  ): Promise<Collection> {
     const collections = await this.getCollections();
     const newCollection: Collection = {
       id: `col-${Date.now()}`,
       name,
       description,
+      icon,
       nodeIds: initialNodeIds,
       edgeIds: initialEdgeIds,
       createdAt: new Date().toISOString(),

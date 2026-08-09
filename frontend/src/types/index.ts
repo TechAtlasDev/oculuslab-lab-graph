@@ -57,6 +57,7 @@ export interface Collection {
   id: string;
   name: string;
   description?: string;
+  icon?: string;
   nodeIds: string[];
   edgeIds?: string[];
   createdAt: string;

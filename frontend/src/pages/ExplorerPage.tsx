@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
-import type { GraphNode, GraphEdge } from '../types';
+import type { GraphNode, GraphEdge, Collection } from '../types';
 import { computeLayout } from '../engines/canvas/layout';
 import type { LayoutAlgorithm } from '../engines/canvas/layout';
 import { cullNodes } from '../engines/canvas/culling';
@@ -9,7 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MagnifyingGlass, BookmarkSimple, PlusCircle } from '@phosphor-icons/react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { MagnifyingGlass, BookmarkSimple, PlusCircle, Bookmarks, Check } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
   const { graphDataService, workspaceService } = useDomainServices();
@@ -19,6 +27,13 @@ export const ExplorerPage: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [layoutAlg, setLayoutAlg] = useState<LayoutAlgorithm>('circular');
+
+  // Modal para agregar subgrafo / nodo a colección específica
+  const [isAddToColOpen, setIsAddToColOpen] = useState<boolean>(false);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [targetCollectionId, setTargetCollectionId] = useState<string>('');
+  const [addedSuccess, setAddedSuccess] = useState<boolean>(false);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const executeSearch = async (searchQuery: string) => {
@@ -82,6 +97,39 @@ export const ExplorerPage: React.FC = () => {
     }
   }, [selectedNode, workspaceService]);
 
+  const loadCollectionsForModal = useCallback(async () => {
+    const cols = await workspaceService.getCollections();
+    setCollections(cols);
+    if (cols.length > 0 && !targetCollectionId) {
+      setTargetCollectionId(cols[0].id);
+    }
+  }, [workspaceService, targetCollectionId]);
+
+  const handleOpenAddToCol = () => {
+    void loadCollectionsForModal();
+    setAddedSuccess(false);
+    setIsAddToColOpen(true);
+  };
+
+  const handleAddGraphToCollection = async () => {
+    if (!targetCollectionId) return;
+
+    // Agregar todos los nodos actuales del grafo visualizado a la colección elegida
+    for (const node of nodes) {
+      await workspaceService.addNodeToCollection(targetCollectionId, node.id);
+    }
+    // Agregar todas las aristas actuales a la colección
+    for (const edge of edges) {
+      await workspaceService.addEdgeToCollection(targetCollectionId, edge.id);
+    }
+
+    setAddedSuccess(true);
+    setTimeout(() => {
+      setIsAddToColOpen(false);
+      setAddedSuccess(false);
+    }, 1200);
+  };
+
   useEffect(() => {
     if (!canvasRef.current || nodes.length === 0) return;
     const canvas = canvasRef.current;
@@ -110,7 +158,7 @@ export const ExplorerPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Navegador del Grafo OptimusKG</h1>
           <p className="text-muted-foreground text-lg">
-            Exploración de subgrafos, consulta de vecinos y renderizado en Canvas Engine.
+            Exploración de subgrafos, consulta de vecinos y almacenamiento directo en colecciones.
           </p>
         </div>
 
@@ -123,7 +171,7 @@ export const ExplorerPage: React.FC = () => {
             placeholder="Buscar gen, proteína, enfermedad..."
             className="w-64 text-base"
           />
-          <Button type="submit" className="gap-2 text-base fmedium_r">
+          <Button type="submit" className="gap-2 text-base font-medium">
             <MagnifyingGlass size={20} />
             Buscar
           </Button>
@@ -133,23 +181,31 @@ export const ExplorerPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Canvas Engine Display */}
         <div className="lg:col-span-2 p-6 bg-card border border-border rounded-xl space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-foreground">Canvas de Visualización</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-base text-muted-foreground">Layout:</span>
-              <Select
-                value={layoutAlg}
-                onValueChange={(val) => setLayoutAlg(val as LayoutAlgorithm)}
-              >
-                <SelectTrigger className="w-36 text-base">
-                  <SelectValue placeholder="Seleccionar layout" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="circular" className="text-base">Circular</SelectItem>
-                  <SelectItem value="grid" className="text-base">Grid</SelectItem>
-                  <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="flex items-center gap-3">
+              <Button onClick={handleOpenAddToCol} variant="secondary" className="gap-2 text-base font-medium">
+                <Bookmarks size={20} />
+                Añadir Grafo a Colección
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-base text-muted-foreground">Layout:</span>
+                <Select
+                  value={layoutAlg}
+                  onValueChange={(val) => setLayoutAlg(val as LayoutAlgorithm)}
+                >
+                  <SelectTrigger className="w-36 text-base">
+                    <SelectValue placeholder="Seleccionar layout" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="circular" className="text-base">Circular</SelectItem>
+                    <SelectItem value="grid" className="text-base">Grid</SelectItem>
+                    <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -165,7 +221,7 @@ export const ExplorerPage: React.FC = () => {
           {selectedNode ? (
             <div className="space-y-4">
               <div>
-                <Badge variant="secondary" className="text-base fmedium_r">
+                <Badge variant="secondary" className="text-base font-medium">
                   {selectedNode.label}
                 </Badge>
                 <h3 className="text-2xl font-bold text-foreground mt-2">{selectedNode.name}</h3>
@@ -186,7 +242,7 @@ export const ExplorerPage: React.FC = () => {
               <Button
                 onClick={toggleSave}
                 variant={isSaved ? "outline" : "default"}
-                className="w-full h-auto py-3 gap-2 text-base fmedium_r"
+                className="w-full h-auto py-3 gap-2 text-base font-medium"
               >
                 {isSaved ? <BookmarkSimple size={22} weight="fill" /> : <PlusCircle size={22} />}
                 {isSaved ? 'Guardado en Workspace' : 'Guardar Nodo en Workspace'}
@@ -197,6 +253,63 @@ export const ExplorerPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Modal para Añadir Grafo a Colección */}
+      <Dialog open={isAddToColOpen} onOpenChange={setIsAddToColOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Guardar Grafo en Colección</DialogTitle>
+            <DialogDescription className="text-base">
+              Guarda los {nodes.length} nodos y {edges.length} aristas visualizadas actualmente en una colección específica.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {collections.length === 0 ? (
+              <p className="text-base text-muted-foreground">
+                No tienes colecciones creadas. Ve al Workspace para crear una nueva colección.
+              </p>
+            ) : (
+              <div>
+                <label className="block text-base font-medium text-foreground mb-1">Selecciona la Colección</label>
+                <Select value={targetCollectionId} onValueChange={(val) => setTargetCollectionId(val || '')}>
+                  <SelectTrigger className="w-full text-base">
+                    <SelectValue placeholder="Elegir colección destino..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {collections.map((col) => (
+                      <SelectItem key={col.id} value={col.id} className="text-base">
+                        {col.name} ({col.nodeIds.length} nodos guardados)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {addedSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-md flex items-center gap-2 text-base font-medium">
+                <Check size={20} />
+                ¡Grafo agregado a la colección exitosamente!
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setIsAddToColOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAddGraphToCollection}
+              disabled={collections.length === 0 || addedSuccess}
+              className="gap-2 text-base font-medium"
+            >
+              Guardar Grafo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

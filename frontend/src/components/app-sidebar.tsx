@@ -13,6 +13,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import type { Tab } from "@/App"
 
 const data = {
   user: {
@@ -38,11 +39,11 @@ const data = {
       items: [
         {
           title: "Colecciones",
-          url: "#",
+          subKey: "workspace-collections" as const,
         },
         {
           title: "Anotaciones",
-          url: "#",
+          subKey: "workspace-annotations" as const,
         },
       ],
     },
@@ -53,11 +54,7 @@ const data = {
       items: [
         {
           title: "Ejecuciones",
-          url: "#",
-        },
-        {
-          title: "Embeddings",
-          url: "#",
+          subKey: "pipelines" as const,
         },
       ],
     },
@@ -77,8 +74,8 @@ const data = {
 }
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  activeTab: string;
-  setActiveTab: (tab: 'dashboard' | 'explorer' | 'workspace' | 'pipelines') => void;
+  activeTab: Tab;
+  setActiveTab: (tab: Tab) => void;
 }
 
 export function AppSidebar({ activeTab, setActiveTab, ...props }: AppSidebarProps) {

@@ -9,7 +9,7 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { PipelinesPage } from './pages/PipelinesPage';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-type Tab = 'dashboard' | 'explorer' | 'workspace' | 'pipelines';
+export type Tab = 'dashboard' | 'explorer' | 'workspace' | 'workspace-collections' | 'workspace-annotations' | 'pipelines';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -23,7 +23,9 @@ function AppContent() {
           <main className="flex-1 overflow-y-auto">
             {activeTab === 'dashboard' && <DashboardPage />}
             {activeTab === 'explorer' && <ExplorerPage />}
-            {activeTab === 'workspace' && <WorkspacePage />}
+            {activeTab === 'workspace' && <WorkspacePage initialTab="all" />}
+            {activeTab === 'workspace-collections' && <WorkspacePage initialTab="collections" />}
+            {activeTab === 'workspace-annotations' && <WorkspacePage initialTab="annotations" />}
             {activeTab === 'pipelines' && <PipelinesPage />}
           </main>
         </SidebarInset>

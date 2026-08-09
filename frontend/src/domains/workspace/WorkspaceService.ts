@@ -31,9 +31,15 @@ export class WorkspaceService {
     return this.repository.getCollectionById(collectionId);
   }
 
-  async createCollection(name: string, description?: string, initialNodeIds?: string[], initialEdgeIds?: string[]): Promise<Collection> {
+  async createCollection(
+    name: string, 
+    description?: string, 
+    icon?: string, 
+    initialNodeIds?: string[], 
+    initialEdgeIds?: string[]
+  ): Promise<Collection> {
     if (!name.trim()) throw new Error('Collection name cannot be empty');
-    return this.repository.createCollection(name, description, initialNodeIds, initialEdgeIds);
+    return this.repository.createCollection(name, description, icon, initialNodeIds, initialEdgeIds);
   }
 
   async deleteCollection(collectionId: string): Promise<void> {

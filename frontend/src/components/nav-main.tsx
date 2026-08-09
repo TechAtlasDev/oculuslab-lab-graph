@@ -16,6 +16,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import type { Tab } from "@/App"
 
 export function NavMain({
   items,
@@ -24,25 +25,26 @@ export function NavMain({
 }: {
   items: {
     title: string
-    key: 'dashboard' | 'explorer' | 'workspace' | 'pipelines'
+    key: Tab
     icon: React.ElementType
     items?: {
       title: string
+      subKey?: Tab
       url?: string
     }[]
   }[]
-  activeTab?: string
-  setActiveTab?: (tab: 'dashboard' | 'explorer' | 'workspace' | 'pipelines') => void
+  activeTab?: Tab
+  setActiveTab?: (tab: Tab) => void
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-base font-semibold text-muted-foreground  mb-2">
+      <SidebarGroupLabel className="text-base font-semibold text-muted-foreground mb-2">
         Exploración
       </SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           const Icon = item.icon
-          const isActive = activeTab === item.key
+          const isActive = activeTab === item.key || item.items?.some(s => s.subKey === activeTab)
 
           if (!item.items?.length) {
             return (
@@ -86,7 +88,15 @@ export function NavMain({
                 <SidebarMenuSub>
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
-                      <SidebarMenuSubButton className="text-base">
+                      <SidebarMenuSubButton
+                        onClick={() => {
+                          if (subItem.subKey) {
+                            setActiveTab?.(subItem.subKey);
+                          }
+                        }}
+                        isActive={activeTab === subItem.subKey}
+                        className="text-base cursor-pointer"
+                      >
                         <span>{subItem.title}</span>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
