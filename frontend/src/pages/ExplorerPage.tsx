@@ -29,6 +29,7 @@ import {
   Minus,
   ArrowsOut,
   Sparkle,
+  X,
 } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
@@ -43,12 +44,12 @@ export const ExplorerPage: React.FC = () => {
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [layoutAlg, setLayoutAlg] = useState<LayoutAlgorithm>('infinite-mesh');
 
-  // Estado del Viewport de la Pizarra Excalidraw (Pan y Zoom)
+  // Estado del Viewport (Pan y Zoom en Canvas Fullscreen)
   const [viewport, setViewport] = useState<Viewport>({
     x: 0,
     y: 0,
-    width: 900,
-    height: 600,
+    width: window.innerWidth,
+    height: window.innerHeight,
     zoom: 1,
   });
 
@@ -67,6 +68,7 @@ export const ExplorerPage: React.FC = () => {
   const [addedSuccess, setAddedSuccess] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Carga e Inicialización del Grafo
   const executeSearch = useCallback(async (searchQuery: string) => {
@@ -89,8 +91,8 @@ export const ExplorerPage: React.FC = () => {
       setPositions(initialPositions);
       setExpandedNodeIds(new Set([root.id]));
 
-      // Centrar viewport
-      setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
+      // Centrar el viewport en pantalla completa
+      setViewport(prev => ({ ...prev, x: prev.width / 3, y: prev.height / 3, zoom: 1 }));
     } else {
       setNodes([]);
       setEdges([]);
@@ -168,7 +170,6 @@ export const ExplorerPage: React.FC = () => {
         const addedNodes = fetchedSubgraph.nodes.filter(n => !existingIds.has(n.id));
         const updated = [...prevNodes, ...addedNodes];
 
-        // Recalcular posiciones del mapa infinito para incluir nuevos nodos
         const newPositions = computeLayout(updated, layoutAlg, viewport.width, viewport.height);
         setPositions(newPositions);
 
@@ -189,21 +190,23 @@ export const ExplorerPage: React.FC = () => {
     }
 
     setLoadingNeighbors(false);
-  }, [expandedNodeIds, loadingNeighbors, graphDataService]);
+  }, [expandedNodeIds, loadingNeighbors, graphDataService, layoutAlg, viewport.width, viewport.height]);
 
-  // 3. Loop de Renderizado en Canvas Engine (Excalidraw Style + Culling)
+  // 3. Loop de Renderizado e Resize Automático a 100% de la Pantalla
   useEffect(() => {
-    if (!canvasRef.current || nodes.length === 0) return;
+    if (!canvasRef.current || !containerRef.current || nodes.length === 0) return;
     const canvas = canvasRef.current;
+    const container = containerRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Actualizar dimensiones físicas del Canvas
-    const rect = canvas.getBoundingClientRect();
-    if (canvas.width !== rect.width || canvas.height !== rect.height) {
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      setViewport(prev => ({ ...prev, width: rect.width, height: rect.height }));
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+      setViewport(prev => ({ ...prev, width, height }));
     }
 
     const visibleIds = cullNodes(positions, viewport);
@@ -213,13 +216,12 @@ export const ExplorerPage: React.FC = () => {
       selectedNodeId: selectedNode?.id,
     });
 
-    // Expandir nodos visibles dinámicamente conforme te desplazas
     void expandVisibleNodesNeighbors(visibleIds);
   }, [nodes, edges, positions, viewport, selectedNode, expandVisibleNodesNeighbors]);
 
-  // 4. Interacciones del Canvas Excalidraw (Pan & Zoom & Selección)
+  // 4. Interacciones de Paneo & Zoom
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return; // Clic izquierdo
+    if (e.button !== 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -227,7 +229,6 @@ export const ExplorerPage: React.FC = () => {
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // Verificar si se hizo clic en un nodo existente en coordenadas del mundo
     const worldX = (clickX - viewport.x) / viewport.zoom;
     const worldY = (clickY - viewport.y) / viewport.zoom;
 
@@ -243,7 +244,6 @@ export const ExplorerPage: React.FC = () => {
     if (clickedNode) {
       setSelectedNode(clickedNode);
     } else {
-      // Iniciar Pan/Desplazamiento
       setIsPanning(true);
       setPanStart({ x: clickX - viewport.x, y: clickY - viewport.y });
     }
@@ -262,24 +262,19 @@ export const ExplorerPage: React.FC = () => {
     }));
   };
 
-  const handleMouseUp = () => {
-    setIsPanning(false);
-  };
+  const handleMouseUp = () => setIsPanning(false);
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     const newZoom = Math.min(Math.max(viewport.zoom * zoomFactor, 0.3), 3);
 
-    setViewport(prev => ({
-      ...prev,
-      zoom: newZoom,
-    }));
+    setViewport(prev => ({ ...prev, zoom: newZoom }));
   };
 
   const handleZoomIn = () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 3) }));
   const handleZoomOut = () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom * 0.8, 0.3) }));
-  const handleResetPan = () => setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
+  const handleResetPan = () => setViewport(prev => ({ ...prev, x: prev.width / 3, y: prev.height / 3, zoom: 1 }));
 
   // Modal para agregar subgrafo a colección
   const loadCollectionsForModal = useCallback(async () => {
@@ -320,142 +315,122 @@ export const ExplorerPage: React.FC = () => {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Navegador Infinito Excalidraw</h1>
-          <p className="text-muted-foreground text-lg">
-            Pizarra infinita con renderizado dinámico al desplazarte, paneo, zoom y expansión de nodos.
-          </p>
-        </div>
+    <div ref={containerRef} className="relative w-full h-full bg-white overflow-hidden select-none">
+      {/* Canvas Fullscreen con Pizarra Excalidraw en Fondo Blanco */}
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        className="w-full h-full cursor-grab active:cursor-grabbing block"
+      />
 
-        {/* Buscador */}
-        <form onSubmit={handleSearchForm} className="flex gap-3">
+      {/* Barra Flotante Superior: Buscador y Controles */}
+      <div className="absolute top-4 left-4 right-4 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
+        <form onSubmit={handleSearchForm} className="flex gap-2 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
           <Input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar gen, proteína, enfermedad..."
-            className="w-64 text-base"
+            placeholder="Buscar en el grafo..."
+            className="w-56 text-base bg-white"
           />
           <Button type="submit" className="gap-2 text-base font-medium">
-            <MagnifyingGlass size={20} />
+            <MagnifyingGlass size={18} />
             Buscar
           </Button>
         </form>
-      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Canvas Engine Pizarra Excalidraw Display */}
-        <div className="lg:col-span-2 p-6 bg-card border border-border rounded-xl space-y-4 shadow-sm relative">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                <Hand size={22} className="text-primary" />
-                Pizarra Infinita ({nodes.length} Nodos Renderizados)
-              </h2>
-              {loadingNeighbors && (
-                <Badge variant="secondary" className="gap-2 text-base animate-pulse">
-                  <Sparkle size={14} className="animate-spin" /> Cargando Nodos...
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button onClick={handleOpenAddToCol} variant="secondary" className="gap-2 text-base font-medium">
-                <Bookmarks size={20} />
-                Guardar Grafo
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <span className="text-base text-muted-foreground">Layout:</span>
-                <Select
-                  value={layoutAlg}
-                  onValueChange={(val) => handleLayoutChange(val as LayoutAlgorithm)}
-                >
-                  <SelectTrigger className="w-40 text-base">
-                    <SelectValue placeholder="Seleccionar layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="infinite-mesh" className="text-base">Malla Infinita</SelectItem>
-                    <SelectItem value="circular" className="text-base">Circular</SelectItem>
-                    <SelectItem value="grid" className="text-base">Grid</SelectItem>
-                    <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Área de Lienzo Interactivo con Controles flotantes */}
-          <div className="relative border border-border rounded-lg bg-slate-950 overflow-hidden select-none">
-            <canvas
-              ref={canvasRef}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onWheel={handleWheel}
-              className="w-full h-96 cursor-grab active:cursor-grabbing"
-            />
-
-            {/* Controles de Zoom y Paneo Flotantes Estilo Excalidraw */}
-            <div className="absolute bottom-4 right-4 bg-card/90 backdrop-blur border border-border rounded-lg p-2 flex items-center gap-2 shadow-lg">
-              <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Alejar (Zoom Out)">
-                <Minus size={18} />
-              </Button>
-              <span className="text-base font-mono font-semibold px-2 text-foreground">
-                {Math.round(viewport.zoom * 100)}%
-              </span>
-              <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Acercar (Zoom In)">
-                <Plus size={18} />
-              </Button>
-              <div className="w-px h-5 bg-border mx-1" />
-              <Button variant="ghost" size="icon" onClick={handleResetPan} title="Centrar Pizarra">
-                <ArrowsOut size={18} />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Inspección de Nodo Seleccionado */}
-        <div className="p-6 bg-card border border-border rounded-xl space-y-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-foreground">Detalle de la Entidad</h2>
-
-          {selectedNode ? (
-            <div className="space-y-4">
-              <div>
-                <Badge variant="secondary" className="text-base font-medium">
-                  {selectedNode.label}
-                </Badge>
-                <h3 className="text-2xl font-bold text-foreground mt-2">{selectedNode.name}</h3>
-                <p className="text-base text-muted-foreground mt-1">{selectedNode.description}</p>
-              </div>
-
-              <div className="p-4 bg-muted/40 rounded-lg space-y-2 border border-border">
-                <h4 className="text-base font-semibold text-foreground">Propiedades:</h4>
-                <ul className="text-base space-y-1 text-muted-foreground">
-                  {Object.entries(selectedNode.properties).map(([k, v]) => (
-                    <li key={k}>
-                      <strong className="text-foreground">{k}:</strong> {String(v)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <Button
-                onClick={toggleSave}
-                variant={isSaved ? "outline" : "default"}
-                className="w-full h-auto py-3 gap-2 text-base font-medium"
-              >
-                {isSaved ? <BookmarkSimple size={22} weight="fill" /> : <PlusCircle size={22} />}
-                {isSaved ? 'Guardado en Workspace' : 'Guardar Nodo en Workspace'}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-base text-muted-foreground">Haz clic en cualquier nodo de la pizarra para inspeccionar sus datos.</p>
+        <div className="flex items-center gap-3 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
+          {loadingNeighbors && (
+            <Badge variant="secondary" className="gap-2 text-base animate-pulse">
+              <Sparkle size={14} className="animate-spin text-primary" /> Cargando...
+            </Badge>
           )}
+
+          <Button onClick={handleOpenAddToCol} variant="secondary" className="gap-2 text-base font-medium">
+            <Bookmarks size={18} />
+            Guardar Grafo
+          </Button>
+
+          <Select value={layoutAlg} onValueChange={(val) => handleLayoutChange(val as LayoutAlgorithm)}>
+            <SelectTrigger className="w-36 text-base bg-white">
+              <SelectValue placeholder="Layout" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="infinite-mesh" className="text-base">Malla Infinita</SelectItem>
+              <SelectItem value="circular" className="text-base">Circular</SelectItem>
+              <SelectItem value="grid" className="text-base">Grid</SelectItem>
+              <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+      </div>
+
+      {/* Panel Flotante Lateral de Inspección de Nodo Seleccionado */}
+      {selectedNode && (
+        <div className="absolute top-20 right-4 w-80 bg-white/95 backdrop-blur border border-border rounded-xl p-5 shadow-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <Badge variant="secondary" className="text-base font-medium">
+              {selectedNode.label}
+            </Badge>
+            <Button variant="ghost" size="icon" onClick={() => setSelectedNode(null)} title="Cerrar panel">
+              <X size={18} />
+            </Button>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">{selectedNode.name}</h3>
+            <p className="text-base text-slate-600 mt-1">{selectedNode.description}</p>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-lg space-y-1.5 border border-slate-200">
+            <h4 className="text-base font-semibold text-slate-900">Propiedades:</h4>
+            <ul className="text-base space-y-1 text-slate-600">
+              {Object.entries(selectedNode.properties).map(([k, v]) => (
+                <li key={k}>
+                  <strong className="text-slate-900">{k}:</strong> {String(v)}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <Button
+            onClick={toggleSave}
+            variant={isSaved ? "outline" : "default"}
+            className="w-full gap-2 text-base font-medium"
+          >
+            {isSaved ? <BookmarkSimple size={20} weight="fill" /> : <PlusCircle size={20} />}
+            {isSaved ? 'Guardado' : 'Guardar Nodo'}
+          </Button>
+        </div>
+      )}
+
+      {/* Controles Flotantes de Zoom y Paneo Estilo Excalidraw (Abajo a la Derecha) */}
+      <div className="absolute bottom-6 right-6 bg-white/95 backdrop-blur border border-border rounded-xl p-2 flex items-center gap-2 shadow-xl">
+        <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Alejar (Zoom Out)">
+          <Minus size={18} />
+        </Button>
+        <span className="text-base font-mono font-semibold px-2 text-slate-800">
+          {Math.round(viewport.zoom * 100)}%
+        </span>
+        <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Acercar (Zoom In)">
+          <Plus size={18} />
+        </Button>
+        <div className="w-px h-5 bg-border mx-1" />
+        <Button variant="ghost" size="icon" onClick={handleResetPan} title="Centrar Pizarra">
+          <ArrowsOut size={18} />
+        </Button>
+      </div>
+
+      {/* Indicador Flotante de Paneo Excalidraw (Abajo a la Izquierda) */}
+      <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur border border-border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-md">
+        <Hand size={18} className="text-primary" />
+        <span className="text-base text-slate-600 font-medium">
+          Arrastra para navegar • {nodes.length} Nodos
+        </span>
       </div>
 
       {/* Modal para Añadir Grafo a Colección */}
