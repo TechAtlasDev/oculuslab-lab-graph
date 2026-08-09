@@ -1,69 +1,107 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
-import type { Collection, GraphNode, UserPreferences } from '../types';
+import type { Collection, NodeAnnotation, GraphNode, UserPreferences } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Folder, Trash, BookmarkSimple, SlidersHorizontal } from '@phosphor-icons/react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Folder, Trash, NotePencil, SlidersHorizontal, Plus, Bookmarks } from '@phosphor-icons/react';
 
 export const WorkspacePage: React.FC = () => {
   const { workspaceService, graphDataService } = useDomainServices();
-  const [savedNodes, setSavedNodes] = useState<GraphNode[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [annotations, setAnnotations] = useState<NodeAnnotation[]>([]);
+  const [annotatedNodeDetails, setAnnotatedNodeDetails] = useState<Map<string, GraphNode>>(new Map());
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [newColName, setNewColName] = useState<string>('');
 
-  const fetchWorkspaceData = async () => {
-    const [savedIds, cols, prefs] = await Promise.all([
-      workspaceService.getSavedNodeIds(),
+  // Estados de formularios y modal
+  const [newColName, setNewColName] = useState<string>('');
+  const [newColDesc, setNewColDesc] = useState<string>('');
+
+  const [isAnnotModalOpen, setIsAnnotModalOpen] = useState<boolean>(false);
+  const [availableNodes, setAvailableNodes] = useState<GraphNode[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string>('');
+  const [annotationNote, setAnnotationNote] = useState<string>('');
+
+  const fetchWorkspaceData = useCallback(async () => {
+    const [cols, annots, prefs, savedIds] = await Promise.all([
       workspaceService.getCollections(),
+      workspaceService.getAllAnnotations(),
       workspaceService.loadPreferences(),
+      workspaceService.getSavedNodeIds(),
     ]);
 
     setCollections(cols);
+    setAnnotations(annots);
     setPreferences(prefs);
 
+    // Obtener detalles de nodos anotados
+    const nodeDetailsMap = new Map<string, GraphNode>();
+    for (const ann of annots) {
+      const node = await graphDataService.fetchNode(ann.nodeId);
+      if (node) {
+        nodeDetailsMap.set(node.id, node);
+      }
+    }
+    setAnnotatedNodeDetails(nodeDetailsMap);
+
+    // Obtener lista de nodos guardados/disponibles para seleccionar en el modal de anotación
     const nodePromises = savedIds.map((id: string) => graphDataService.fetchNode(id));
-    const nodes = (await Promise.all(nodePromises)).filter((n: GraphNode | null): n is GraphNode => n !== null);
-    setSavedNodes(nodes);
-  };
+    const loadedNodes = (await Promise.all(nodePromises)).filter((n: GraphNode | null): n is GraphNode => n !== null);
+    
+    // Si no hay guardados, precargar algunos de ejemplo (TP53, MDM2)
+    if (loadedNodes.length === 0) {
+      const fallbackNodes = await graphDataService.searchGraph('a');
+      setAvailableNodes(fallbackNodes);
+    } else {
+      setAvailableNodes(loadedNodes);
+    }
+  }, [workspaceService, graphDataService]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [savedIds, cols, prefs] = await Promise.all([
-        workspaceService.getSavedNodeIds(),
-        workspaceService.getCollections(),
-        workspaceService.loadPreferences(),
-      ]);
-
-      if (!active) return;
-      setCollections(cols);
-      setPreferences(prefs);
-
-      const nodePromises = savedIds.map((id: string) => graphDataService.fetchNode(id));
-      const nodes = (await Promise.all(nodePromises)).filter((n: GraphNode | null): n is GraphNode => n !== null);
       if (active) {
-        setSavedNodes(nodes);
+        await fetchWorkspaceData();
       }
     })();
-
     return () => {
       active = false;
     };
-  }, [workspaceService, graphDataService]);
+  }, [fetchWorkspaceData]);
 
+  // Manejadores de Colección
   const handleCreateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newColName.trim()) return;
-    await workspaceService.createCollection(newColName);
+    await workspaceService.createCollection(newColName.trim(), newColDesc.trim() || undefined);
     setNewColName('');
+    setNewColDesc('');
     await fetchWorkspaceData();
   };
 
   const handleDeleteCollection = async (id: string) => {
     await workspaceService.deleteCollection(id);
+    await fetchWorkspaceData();
+  };
+
+  // Manejadores de Anotación
+  const handleSaveAnnotation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedNodeId || !annotationNote.trim()) return;
+    await workspaceService.saveAnnotation(selectedNodeId, annotationNote.trim());
+    setSelectedNodeId('');
+    setAnnotationNote('');
+    setIsAnnotModalOpen(false);
     await fetchWorkspaceData();
   };
 
@@ -80,78 +118,118 @@ export const WorkspacePage: React.FC = () => {
           Workspace del Usuario
         </h1>
         <p className="text-muted-foreground text-lg">
-          Gestión de nodos guardados, colecciones personalizadas y preferencias de sesión local.
+          Gestión de colecciones personalizadas, anotaciones sobre entidades biomédicas y preferencias.
         </p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Nodos Guardados */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="p-6 bg-card border border-border rounded-xl space-y-4 shadow-sm">
-            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-              <BookmarkSimple size={24} />
-              Nodos Guardados ({savedNodes.length})
-            </h2>
-            {savedNodes.length === 0 ? (
-              <p className="text-base text-muted-foreground">No tienes nodos guardados en tu espacio de trabajo.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {savedNodes.map((node) => (
-                  <div key={node.id} className="p-4 bg-muted/30 border border-border rounded-lg space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-foreground">{node.name}</span>
-                      <Badge variant="secondary" className="text-base">
-                        {node.label}
-                      </Badge>
-                    </div>
-                    <p className="text-base text-muted-foreground line-clamp-2">{node.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Colecciones */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Sección de Colecciones */}
           <div className="p-6 bg-card border border-border rounded-xl space-y-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
               <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                <Folder size={24} />
+                <Bookmarks size={24} />
                 Colecciones ({collections.length})
               </h2>
-              <form onSubmit={handleCreateCollection} className="flex gap-2">
+            </div>
+
+            {/* Formulario de Creación de Nueva Colección */}
+            <form onSubmit={handleCreateCollection} className="p-4 bg-muted/30 border border-border rounded-lg space-y-3">
+              <h3 className="text-base font-semibold text-foreground">Crear Nueva Colección</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   type="text"
                   value={newColName}
                   onChange={(e) => setNewColName(e.target.value)}
-                  placeholder="Nueva colección..."
-                  className="w-48 text-base"
+                  placeholder="Nombre de la colección (ej. Objetos Oncológicos)..."
+                  className="text-base"
                 />
-                <Button type="submit" className="text-base fmedium_r">
-                  Crear
-                </Button>
-              </form>
+                <Input
+                  type="text"
+                  value={newColDesc}
+                  onChange={(e) => setNewColDesc(e.target.value)}
+                  placeholder="Descripción opcional..."
+                  className="text-base"
+                />
+              </div>
+              <Button type="submit" className="gap-2 text-base font-medium">
+                <Plus size={18} />
+                Crear Colección
+              </Button>
+            </form>
+
+            {/* Lista de Colecciones */}
+            <div className="space-y-3">
+              {collections.length === 0 ? (
+                <p className="text-base text-muted-foreground">No tienes colecciones creadas.</p>
+              ) : (
+                collections.map((col) => (
+                  <div key={col.id} className="p-4 bg-muted/20 border border-border rounded-lg flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">{col.name}</h3>
+                      <p className="text-base text-muted-foreground">
+                        {col.description || 'Sin descripción'} • {col.nodeIds.length} Nodos incluidos
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteCollection(col.id)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      title="Eliminar colección"
+                    >
+                      <Trash size={20} />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Sección de Anotaciones */}
+          <div className="p-6 bg-card border border-border rounded-xl space-y-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                <NotePencil size={24} />
+                Anotaciones de Nodos ({annotations.length})
+              </h2>
+              <Button onClick={() => setIsAnnotModalOpen(true)} className="gap-2 text-base font-medium">
+                <Plus size={18} />
+                Nueva Anotación
+              </Button>
             </div>
 
-            <div className="space-y-3">
-              {collections.map((col) => (
-                <div key={col.id} className="p-4 bg-muted/20 border border-border rounded-lg flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">{col.name}</h3>
-                    <p className="text-base text-muted-foreground">
-                      {col.description || 'Sin descripción'} • {col.nodeIds.length} Nodos
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteCollection(col.id)}
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    title="Eliminar colección"
-                  >
-                    <Trash size={20} />
-                  </Button>
-                </div>
-              ))}
+            {/* Lista de Anotaciones */}
+            <div className="space-y-4">
+              {annotations.length === 0 ? (
+                <p className="text-base text-muted-foreground">No has añadido notas a ninguna entidad del grafo.</p>
+              ) : (
+                annotations.map((ann) => {
+                  const nodeDetails = annotatedNodeDetails.get(ann.nodeId);
+                  return (
+                    <div key={ann.nodeId} className="p-4 bg-muted/20 border border-border rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold text-foreground">
+                            {nodeDetails ? nodeDetails.name : ann.nodeId}
+                          </span>
+                          {nodeDetails && (
+                            <Badge variant="secondary" className="text-base">
+                              {nodeDetails.label}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-base text-muted-foreground">
+                          {new Date(ann.updatedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-base text-foreground bg-background p-3 border border-border rounded-md italic">
+                        "{ann.note}"
+                      </p>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -166,7 +244,7 @@ export const WorkspacePage: React.FC = () => {
           {preferences && (
             <div className="space-y-4">
               <div>
-                <label className="block text-base fmedium_r text-foreground mb-1">Layout Predeterminado</label>
+                <label className="block text-base font-medium text-foreground mb-1">Layout Predeterminado</label>
                 <Select
                   value={preferences.canvasLayout}
                   onValueChange={(val) => handlePreferenceChange('canvasLayout', val)}
@@ -183,7 +261,7 @@ export const WorkspacePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-base fmedium_r text-foreground mb-1">Máximo Nodos Renderizados</label>
+                <label className="block text-base font-medium text-foreground mb-1">Máximo Nodos Renderizados</label>
                 <Input
                   type="number"
                   value={preferences.maxRenderedNodes}
@@ -193,7 +271,7 @@ export const WorkspacePage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <span className="text-base fmedium_r text-foreground">Mostrar Etiquetas</span>
+                <span className="text-base font-medium text-foreground">Mostrar Etiquetas</span>
                 <input
                   type="checkbox"
                   checked={preferences.showLabels}
@@ -205,6 +283,56 @@ export const WorkspacePage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Modal para Crear Nueva Anotación */}
+      <Dialog open={isAnnotModalOpen} onOpenChange={setIsAnnotModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Agregar Anotación a Nodo</DialogTitle>
+            <DialogDescription className="text-base">
+              Selecciona una entidad del grafo y escribe tu observación de investigación.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveAnnotation} className="space-y-4 py-2">
+            <div>
+              <label className="block text-base font-medium text-foreground mb-1">Entidad / Nodo</label>
+              <Select value={selectedNodeId} onValueChange={(val) => setSelectedNodeId(val || '')}>
+                <SelectTrigger className="w-full text-base">
+                  <SelectValue placeholder="Selecciona un nodo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableNodes.map((node) => (
+                    <SelectItem key={node.id} value={node.id} className="text-base">
+                      {node.name} ({node.label})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-base font-medium text-foreground mb-1">Nota / Observación</label>
+              <Textarea
+                value={annotationNote}
+                onChange={(e) => setAnnotationNote(e.target.value)}
+                placeholder="Escribe la observación sobre esta entidad biomédica..."
+                className="text-base"
+                rows={4}
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setIsAnnotModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="gap-2 text-base font-medium">
+                Guardar Anotación
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
