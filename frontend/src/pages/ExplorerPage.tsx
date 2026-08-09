@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
 import type { GraphNode, GraphEdge, Collection } from '../types';
-import { computeLayout } from '../engines/canvas/layout';
-import type { LayoutAlgorithm, NodePosition } from '../engines/canvas/layout';
+import { ForceGraphPhysicsEngine } from '../engines/canvas/ForceGraphPhysicsEngine';
 import { cullNodes } from '../engines/canvas/culling';
 import type { Viewport } from '../engines/canvas/culling';
 import { renderGraphToCanvas } from '../engines/canvas/renderer';
@@ -30,6 +29,8 @@ import {
   ArrowsOut,
   Sparkle,
   X,
+  Play,
+  Pause,
 } from '@phosphor-icons/react';
 
 export const ExplorerPage: React.FC = () => {
@@ -39,12 +40,17 @@ export const ExplorerPage: React.FC = () => {
   const [query, setQuery] = useState<string>('TP53');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map());
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isSaved, setIsSaved] = useState<boolean>(false);
-  const [layoutAlg, setLayoutAlg] = useState<LayoutAlgorithm>('infinite-mesh');
+  const [isSimulating, setIsSimulating] = useState<boolean>(true);
 
-  // Estado del Viewport (Pan y Zoom en Canvas Fullscreen)
+  // Instancia Persistente del Motor Físico D3 (Inicialización segura)
+  const physicsEngineRef = useRef<ForceGraphPhysicsEngine | null>(null);
+  if (physicsEngineRef.current == null) {
+    physicsEngineRef.current = new ForceGraphPhysicsEngine(window.innerWidth, window.innerHeight);
+  }
+
+  // Estado del Viewport (Pan y Zoom)
   const [viewport, setViewport] = useState<Viewport>({
     x: 0,
     y: 0,
@@ -53,15 +59,16 @@ export const ExplorerPage: React.FC = () => {
     zoom: 1,
   });
 
-  // Estados de Interacción (Drag / Pan)
+  // Estados de Arrastre (Drag de Nodo vs Pan de Fondo)
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Control de Renderizado bajo Demanda al Desplazarse
+  // Control de Carga Dinámica al Desplazarse
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
   const [loadingNeighbors, setLoadingNeighbors] = useState<boolean>(false);
 
-  // Modal para agregar a colección
+  // Modal para guardar en colección
   const [isAddToColOpen, setIsAddToColOpen] = useState<boolean>(false);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [targetCollectionId, setTargetCollectionId] = useState<string>('');
@@ -70,73 +77,7 @@ export const ExplorerPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Carga e Inicialización del Grafo
-  const executeSearch = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
-
-    const searchResults = await graphDataService.searchGraph(searchQuery);
-    if (searchResults.length > 0) {
-      const root = searchResults[0];
-      setSelectedNode(root);
-      await workspaceService.recordNodeVisit(root.id);
-
-      const neighborEdges = await graphDataService.fetchNeighbors(root.id);
-      const neighborIds = Array.from(new Set(neighborEdges.flatMap((e: GraphEdge) => [e.source, e.target])));
-
-      const subgraph = await graphDataService.fetchSubgraph([root.id, ...neighborIds]);
-      const initialPositions = computeLayout(subgraph.nodes, layoutAlg, viewport.width, viewport.height);
-
-      setNodes(subgraph.nodes);
-      setEdges(subgraph.edges);
-      setPositions(initialPositions);
-      setExpandedNodeIds(new Set([root.id]));
-
-      // Centrar el viewport en pantalla completa
-      setViewport(prev => ({ ...prev, x: prev.width / 3, y: prev.height / 3, zoom: 1 }));
-    } else {
-      setNodes([]);
-      setEdges([]);
-      setPositions(new Map());
-      setSelectedNode(null);
-    }
-  }, [graphDataService, workspaceService, layoutAlg, viewport.width, viewport.height]);
-
-  const handleSearchForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    void executeSearch(query);
-  };
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      if (active) {
-        await executeSearch('TP53');
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [executeSearch]);
-
-  // Cambiar layout de nodos
-  const handleLayoutChange = (newAlg: LayoutAlgorithm) => {
-    setLayoutAlg(newAlg);
-    if (nodes.length > 0) {
-      const computed = computeLayout(nodes, newAlg, viewport.width, viewport.height);
-      setPositions(computed);
-    }
-  };
-
-  // Actualizar guardado de nodo seleccionado
-  useEffect(() => {
-    if (selectedNode) {
-      void workspaceService.getSavedNodeIds().then((saved: string[]) => {
-        setIsSaved(saved.includes(selectedNode.id));
-      });
-    }
-  }, [selectedNode, workspaceService]);
-
-  // 2. Expansión Dinámica de Nodos al Desplazarse o Hacer Clic (Renderizado Infinito)
+  // Expansión Automática de Nodos al Desplazarte por la Pizarra
   const expandVisibleNodesNeighbors = useCallback(async (visibleIds: Set<string>) => {
     if (loadingNeighbors) return;
     const newToExpand: string[] = [];
@@ -168,18 +109,19 @@ export const ExplorerPage: React.FC = () => {
       setNodes(prevNodes => {
         const existingIds = new Set(prevNodes.map(n => n.id));
         const addedNodes = fetchedSubgraph.nodes.filter(n => !existingIds.has(n.id));
-        const updated = [...prevNodes, ...addedNodes];
+        const updatedNodes = [...prevNodes, ...addedNodes];
 
-        const newPositions = computeLayout(updated, layoutAlg, viewport.width, viewport.height);
-        setPositions(newPositions);
+        setEdges(prevEdges => {
+          const existingEdgeIds = new Set(prevEdges.map(e => e.id));
+          const addedEdges = allNewEdges.filter(e => !existingEdgeIds.has(e.id));
+          const updatedEdges = [...prevEdges, ...addedEdges];
 
-        return updated;
-      });
+          // Actualizar Simulación Física en Vivo
+          physicsEngineRef.current?.updateGraph(updatedNodes, updatedEdges, viewport.width, viewport.height);
+          return updatedEdges;
+        });
 
-      setEdges(prevEdges => {
-        const existingEdgeIds = new Set(prevEdges.map(e => e.id));
-        const addedEdges = allNewEdges.filter(e => !existingEdgeIds.has(e.id));
-        return [...prevEdges, ...addedEdges];
+        return updatedNodes;
       });
 
       setExpandedNodeIds(prev => {
@@ -190,16 +132,98 @@ export const ExplorerPage: React.FC = () => {
     }
 
     setLoadingNeighbors(false);
-  }, [expandedNodeIds, loadingNeighbors, graphDataService, layoutAlg, viewport.width, viewport.height]);
+  }, [expandedNodeIds, loadingNeighbors, graphDataService, viewport.width, viewport.height]);
 
-  // 3. Loop de Renderizado e Resize Automático a 100% de la Pantalla
-  useEffect(() => {
-    if (!canvasRef.current || !containerRef.current || nodes.length === 0) return;
+  // Renderizar en Canvas usando las Posiciones Físicas en Real-Time
+  const renderFrame = useCallback(() => {
+    if (!canvasRef.current || !physicsEngineRef.current) return;
     const canvas = canvasRef.current;
-    const container = containerRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const positions = physicsEngineRef.current.getPositions();
+    const visibleIds = cullNodes(positions, viewport);
+
+    renderGraphToCanvas(ctx, nodes, edges, positions, visibleIds, viewport, {
+      nodeRadius: 24,
+      showLabels: true,
+      selectedNodeId: selectedNode?.id,
+    });
+
+    void expandVisibleNodesNeighbors(visibleIds);
+  }, [nodes, edges, viewport, selectedNode, expandVisibleNodesNeighbors]);
+
+  // Suscribir callback de tick de la física D3
+  useEffect(() => {
+    if (physicsEngineRef.current) {
+      physicsEngineRef.current.onTick(() => {
+        renderFrame();
+      });
+    }
+  }, [renderFrame]);
+
+  // Carga Inicial del Grafo
+  const executeSearch = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
+
+    const searchResults = await graphDataService.searchGraph(searchQuery);
+    if (searchResults.length > 0) {
+      const root = searchResults[0];
+      setSelectedNode(root);
+      await workspaceService.recordNodeVisit(root.id);
+
+      const neighborEdges = await graphDataService.fetchNeighbors(root.id);
+      const neighborIds = Array.from(new Set(neighborEdges.flatMap((e: GraphEdge) => [e.source, e.target])));
+
+      const subgraph = await graphDataService.fetchSubgraph([root.id, ...neighborIds]);
+
+      setNodes(subgraph.nodes);
+      setEdges(subgraph.edges);
+      setExpandedNodeIds(new Set([root.id]));
+
+      // Actualizar Motor Físico con los nuevos nodos y aristas
+      physicsEngineRef.current?.updateGraph(subgraph.nodes, subgraph.edges, viewport.width, viewport.height);
+
+      // Centrar el viewport
+      setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
+    } else {
+      setNodes([]);
+      setEdges([]);
+      setSelectedNode(null);
+    }
+  }, [graphDataService, workspaceService, viewport.width, viewport.height]);
+
+  const handleSearchForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    void executeSearch(query);
+  };
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      if (active) {
+        await executeSearch('TP53');
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [executeSearch]);
+
+  // Actualizar el estado guardado del nodo seleccionado
+  useEffect(() => {
+    if (selectedNode) {
+      void workspaceService.getSavedNodeIds().then((saved: string[]) => {
+        setIsSaved(saved.includes(selectedNode.id));
+      });
+    }
+  }, [selectedNode, workspaceService]);
+
+  // Loop de Redimensionamiento
+  useEffect(() => {
+    if (!canvasRef.current || !containerRef.current) return;
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
     const width = container.clientWidth;
     const height = container.clientHeight;
 
@@ -208,22 +232,13 @@ export const ExplorerPage: React.FC = () => {
       canvas.height = height;
       setViewport(prev => ({ ...prev, width, height }));
     }
+  }, []);
 
-    const visibleIds = cullNodes(positions, viewport);
-    renderGraphToCanvas(ctx, nodes, edges, positions, visibleIds, viewport, {
-      nodeRadius: 22,
-      showLabels: true,
-      selectedNodeId: selectedNode?.id,
-    });
-
-    void expandVisibleNodesNeighbors(visibleIds);
-  }, [nodes, edges, positions, viewport, selectedNode, expandVisibleNodesNeighbors]);
-
-  // 4. Interacciones de Paneo & Zoom
+  // Interacciones Táctiles / Drag & Drop Físico de Nodos y Paneo de Cámara
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !physicsEngineRef.current) return;
 
     const rect = canvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -232,37 +247,59 @@ export const ExplorerPage: React.FC = () => {
     const worldX = (clickX - viewport.x) / viewport.zoom;
     const worldY = (clickY - viewport.y) / viewport.zoom;
 
-    let clickedNode: GraphNode | null = null;
+    const positions = physicsEngineRef.current.getPositions();
+    let clickedNodeId: string | null = null;
+
     positions.forEach((pos, id) => {
       const dist = Math.hypot(pos.x - worldX, pos.y - worldY);
-      if (dist <= 25) {
-        const found = nodes.find(n => n.id === id);
-        if (found) clickedNode = found;
+      if (dist <= 28) {
+        clickedNodeId = id;
       }
     });
 
-    if (clickedNode) {
-      setSelectedNode(clickedNode);
+    if (clickedNodeId) {
+      const found = nodes.find(n => n.id === clickedNodeId);
+      if (found) setSelectedNode(found);
+
+      // Iniciar Arrastre Físico del Nodo
+      setDraggedNodeId(clickedNodeId);
+      physicsEngineRef.current.dragStart(clickedNodeId);
     } else {
+      // Iniciar Desplazamiento de Cámara (Pan)
       setIsPanning(true);
       setPanStart({ x: clickX - viewport.x, y: clickY - viewport.y });
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isPanning || !canvasRef.current) return;
+    if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const currentX = e.clientX - rect.left;
     const currentY = e.clientY - rect.top;
 
-    setViewport(prev => ({
-      ...prev,
-      x: currentX - panStart.x,
-      y: currentY - panStart.y,
-    }));
+    if (draggedNodeId && physicsEngineRef.current) {
+      // Arrastrar Nodo en Coordenadas del Mundo Físico
+      const worldX = (currentX - viewport.x) / viewport.zoom;
+      const worldY = (currentY - viewport.y) / viewport.zoom;
+      physicsEngineRef.current.drag(draggedNodeId, worldX, worldY);
+      renderFrame();
+    } else if (isPanning) {
+      // Desplazar Cámara
+      setViewport(prev => ({
+        ...prev,
+        x: currentX - panStart.x,
+        y: currentY - panStart.y,
+      }));
+    }
   };
 
-  const handleMouseUp = () => setIsPanning(false);
+  const handleMouseUp = () => {
+    if (draggedNodeId && physicsEngineRef.current) {
+      physicsEngineRef.current.dragEnd(draggedNodeId);
+      setDraggedNodeId(null);
+    }
+    setIsPanning(false);
+  };
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -274,7 +311,7 @@ export const ExplorerPage: React.FC = () => {
 
   const handleZoomIn = () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 3) }));
   const handleZoomOut = () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom * 0.8, 0.3) }));
-  const handleResetPan = () => setViewport(prev => ({ ...prev, x: prev.width / 3, y: prev.height / 3, zoom: 1 }));
+  const handleResetPan = () => setViewport(prev => ({ ...prev, x: prev.width / 4, y: prev.height / 4, zoom: 1 }));
 
   // Modal para agregar subgrafo a colección
   const loadCollectionsForModal = useCallback(async () => {
@@ -316,7 +353,7 @@ export const ExplorerPage: React.FC = () => {
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-white overflow-hidden select-none">
-      {/* Canvas Fullscreen con Pizarra Excalidraw en Fondo Blanco */}
+      {/* Canvas Fullscreen con Pizarra de Física Automática en Vivo */}
       <canvas
         ref={canvasRef}
         onMouseDown={handleMouseDown}
@@ -346,7 +383,7 @@ export const ExplorerPage: React.FC = () => {
         <div className="flex items-center gap-3 pointer-events-auto bg-white/90 backdrop-blur border border-border p-2 rounded-xl shadow-md">
           {loadingNeighbors && (
             <Badge variant="secondary" className="gap-2 text-base animate-pulse">
-              <Sparkle size={14} className="animate-spin text-primary" /> Cargando...
+              <Sparkle size={14} className="animate-spin text-primary" /> Auto-organizándose...
             </Badge>
           )}
 
@@ -355,17 +392,14 @@ export const ExplorerPage: React.FC = () => {
             Guardar Grafo
           </Button>
 
-          <Select value={layoutAlg} onValueChange={(val) => handleLayoutChange(val as LayoutAlgorithm)}>
-            <SelectTrigger className="w-36 text-base bg-white">
-              <SelectValue placeholder="Layout" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="infinite-mesh" className="text-base">Malla Infinita</SelectItem>
-              <SelectItem value="circular" className="text-base">Circular</SelectItem>
-              <SelectItem value="grid" className="text-base">Grid</SelectItem>
-              <SelectItem value="force-directed" className="text-base">Fuerza</SelectItem>
-            </SelectContent>
-          </Select>
+          <Button
+            variant="outline"
+            onClick={() => setIsSimulating(!isSimulating)}
+            className="gap-2 text-base font-medium"
+          >
+            {isSimulating ? <Pause size={18} /> : <Play size={18} />}
+            {isSimulating ? 'Pausar Física' : 'Activar Física'}
+          </Button>
         </div>
       </div>
 
@@ -425,11 +459,11 @@ export const ExplorerPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Indicador Flotante de Paneo Excalidraw (Abajo a la Izquierda) */}
+      {/* Indicador Flotante de Paneo e Interactividad Físico (Abajo a la Izquierda) */}
       <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur border border-border rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-md">
         <Hand size={18} className="text-primary" />
         <span className="text-base text-slate-600 font-medium">
-          Arrastra para navegar • {nodes.length} Nodos
+          Arrastra nodos o desplázate • {nodes.length} Nodos Auto-Organizados
         </span>
       </div>
 
