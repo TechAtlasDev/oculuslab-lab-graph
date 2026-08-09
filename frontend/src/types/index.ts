@@ -58,6 +58,7 @@ export interface Collection {
   name: string;
   description?: string;
   nodeIds: string[];
+  edgeIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

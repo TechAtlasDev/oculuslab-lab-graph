@@ -46,20 +46,27 @@ export class LocalStorageWorkspaceRepository implements IWorkspaceRepository {
         id: 'col-default',
         name: 'Oncology Targets',
         description: 'Key genes associated with cancer research',
-        nodeIds: ['node-1', 'node-3'],
+        nodeIds: ['node-1', 'node-3', 'node-6'],
+        edgeIds: ['edge-2', 'edge-5'],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
     ]);
   }
 
-  async createCollection(name: string, description?: string): Promise<Collection> {
+  async getCollectionById(collectionId: string): Promise<Collection | null> {
+    const collections = await this.getCollections();
+    return collections.find(c => c.id === collectionId) || null;
+  }
+
+  async createCollection(name: string, description?: string, initialNodeIds: string[] = [], initialEdgeIds: string[] = []): Promise<Collection> {
     const collections = await this.getCollections();
     const newCollection: Collection = {
       id: `col-${Date.now()}`,
       name,
       description,
-      nodeIds: [],
+      nodeIds: initialNodeIds,
+      edgeIds: initialEdgeIds,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -89,6 +96,29 @@ export class LocalStorageWorkspaceRepository implements IWorkspaceRepository {
     const target = collections.find(c => c.id === collectionId);
     if (target) {
       target.nodeIds = target.nodeIds.filter(id => id !== nodeId);
+      target.updatedAt = new Date().toISOString();
+      this.writeJson(STORAGE_KEYS.COLLECTIONS, collections);
+    }
+  }
+
+  async addEdgeToCollection(collectionId: string, edgeId: string): Promise<void> {
+    const collections = await this.getCollections();
+    const target = collections.find(c => c.id === collectionId);
+    if (target) {
+      if (!target.edgeIds) target.edgeIds = [];
+      if (!target.edgeIds.includes(edgeId)) {
+        target.edgeIds.push(edgeId);
+        target.updatedAt = new Date().toISOString();
+        this.writeJson(STORAGE_KEYS.COLLECTIONS, collections);
+      }
+    }
+  }
+
+  async removeEdgeFromCollection(collectionId: string, edgeId: string): Promise<void> {
+    const collections = await this.getCollections();
+    const target = collections.find(c => c.id === collectionId);
+    if (target && target.edgeIds) {
+      target.edgeIds = target.edgeIds.filter(id => id !== edgeId);
       target.updatedAt = new Date().toISOString();
       this.writeJson(STORAGE_KEYS.COLLECTIONS, collections);
     }

@@ -27,9 +27,13 @@ export class WorkspaceService {
     return this.repository.getCollections();
   }
 
-  async createCollection(name: string, description?: string): Promise<Collection> {
+  async getCollection(collectionId: string): Promise<Collection | null> {
+    return this.repository.getCollectionById(collectionId);
+  }
+
+  async createCollection(name: string, description?: string, initialNodeIds?: string[], initialEdgeIds?: string[]): Promise<Collection> {
     if (!name.trim()) throw new Error('Collection name cannot be empty');
-    return this.repository.createCollection(name, description);
+    return this.repository.createCollection(name, description, initialNodeIds, initialEdgeIds);
   }
 
   async deleteCollection(collectionId: string): Promise<void> {
@@ -42,6 +46,14 @@ export class WorkspaceService {
 
   async removeNodeFromCollection(collectionId: string, nodeId: string): Promise<void> {
     return this.repository.removeFromCollection(collectionId, nodeId);
+  }
+
+  async addEdgeToCollection(collectionId: string, edgeId: string): Promise<void> {
+    return this.repository.addEdgeToCollection(collectionId, edgeId);
+  }
+
+  async removeEdgeFromCollection(collectionId: string, edgeId: string): Promise<void> {
+    return this.repository.removeEdgeFromCollection(collectionId, edgeId);
   }
 
   async saveAnnotation(nodeId: string, note: string): Promise<void> {

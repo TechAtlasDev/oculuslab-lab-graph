@@ -9,10 +9,13 @@ export interface IWorkspaceRepository {
 
   // Collections
   getCollections(): Promise<Collection[]>;
-  createCollection(name: string, description?: string): Promise<Collection>;
+  getCollectionById(collectionId: string): Promise<Collection | null>;
+  createCollection(name: string, description?: string, initialNodeIds?: string[], initialEdgeIds?: string[]): Promise<Collection>;
   deleteCollection(collectionId: string): Promise<void>;
   addToCollection(collectionId: string, nodeId: string): Promise<void>;
   removeFromCollection(collectionId: string, nodeId: string): Promise<void>;
+  addEdgeToCollection(collectionId: string, edgeId: string): Promise<void>;
+  removeEdgeFromCollection(collectionId: string, edgeId: string): Promise<void>;
 
   // Annotations
   getAnnotations(): Promise<NodeAnnotation[]>;

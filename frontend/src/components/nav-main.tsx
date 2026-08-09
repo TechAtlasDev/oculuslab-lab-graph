@@ -36,7 +36,7 @@ export function NavMain({
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-base font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+      <SidebarGroupLabel className="text-base font-semibold text-muted-foreground  mb-2">
         Exploración
       </SidebarGroupLabel>
       <SidebarMenu>

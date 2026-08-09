@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useDomainServices } from '../context/useDomainServices';
 import type { Collection, NodeAnnotation, GraphNode, UserPreferences } from '../types';
+import { CollectionAnalysisPage } from './CollectionAnalysisPage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Folder, Trash, NotePencil, SlidersHorizontal, Plus, Bookmarks } from '@phosphor-icons/react';
+import { Folder, Trash, NotePencil, SlidersHorizontal, Plus, Bookmarks, Eye } from '@phosphor-icons/react';
 
 export const WorkspacePage: React.FC = () => {
   const { workspaceService, graphDataService } = useDomainServices();
@@ -22,6 +23,9 @@ export const WorkspacePage: React.FC = () => {
   const [annotations, setAnnotations] = useState<NodeAnnotation[]>([]);
   const [annotatedNodeDetails, setAnnotatedNodeDetails] = useState<Map<string, GraphNode>>(new Map());
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+
+  // Navegación hacia el análisis de colección
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
   // Estados de formularios y modal
   const [newColName, setNewColName] = useState<string>('');
@@ -54,11 +58,10 @@ export const WorkspacePage: React.FC = () => {
     }
     setAnnotatedNodeDetails(nodeDetailsMap);
 
-    // Obtener lista de nodos guardados/disponibles para seleccionar en el modal de anotación
+    // Obtener lista de nodos disponibles
     const nodePromises = savedIds.map((id: string) => graphDataService.fetchNode(id));
     const loadedNodes = (await Promise.all(nodePromises)).filter((n: GraphNode | null): n is GraphNode => n !== null);
     
-    // Si no hay guardados, precargar algunos de ejemplo (TP53, MDM2)
     if (loadedNodes.length === 0) {
       const fallbackNodes = await graphDataService.searchGraph('a');
       setAvailableNodes(fallbackNodes);
@@ -79,6 +82,16 @@ export const WorkspacePage: React.FC = () => {
     };
   }, [fetchWorkspaceData]);
 
+  // Si hay una colección seleccionada, renderizar la vista de Análisis
+  if (selectedCollectionId) {
+    return (
+      <CollectionAnalysisPage
+        collectionId={selectedCollectionId}
+        onBack={() => setSelectedCollectionId(null)}
+      />
+    );
+  }
+
   // Manejadores de Colección
   const handleCreateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +102,8 @@ export const WorkspacePage: React.FC = () => {
     await fetchWorkspaceData();
   };
 
-  const handleDeleteCollection = async (id: string) => {
+  const handleDeleteCollection = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     await workspaceService.deleteCollection(id);
     await fetchWorkspaceData();
   };
@@ -158,28 +172,51 @@ export const WorkspacePage: React.FC = () => {
               </Button>
             </form>
 
-            {/* Lista de Colecciones */}
+            {/* Lista de Colecciones Interactivas */}
             <div className="space-y-3">
               {collections.length === 0 ? (
                 <p className="text-base text-muted-foreground">No tienes colecciones creadas.</p>
               ) : (
                 collections.map((col) => (
-                  <div key={col.id} className="p-4 bg-muted/20 border border-border rounded-lg flex items-center justify-between">
+                  <div
+                    key={col.id}
+                    onClick={() => setSelectedCollectionId(col.id)}
+                    className="p-4 bg-muted/20 hover:bg-muted/40 border border-border rounded-lg flex items-center justify-between cursor-pointer transition-colors"
+                  >
                     <div>
-                      <h3 className="text-lg font-semibold text-foreground">{col.name}</h3>
-                      <p className="text-base text-muted-foreground">
-                        {col.description || 'Sin descripción'} • {col.nodeIds.length} Nodos incluidos
+                      <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                        {col.name}
+                        <Badge variant="outline" className="text-base font-normal">
+                          {col.nodeIds.length} Nodos
+                        </Badge>
+                      </h3>
+                      <p className="text-base text-muted-foreground mt-1">
+                        {col.description || 'Sin descripción'} • Actualizada el {new Date(col.updatedAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteCollection(col.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      title="Eliminar colección"
-                    >
-                      <Trash size={20} />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCollectionId(col.id);
+                        }}
+                        className="gap-2 text-base font-medium"
+                      >
+                        <Eye size={18} />
+                        Analizar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDeleteCollection(col.id, e)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        title="Eliminar colección"
+                      >
+                        <Trash size={20} />
+                      </Button>
+                    </div>
                   </div>
                 ))
               )}
