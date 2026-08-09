@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useDomainServices } from '../context/useDomainServices';
 import type { Collection, NodeAnnotation, GraphNode, UserPreferences } from '../types';
 import { CollectionAnalysisPage } from './CollectionAnalysisPage';
@@ -49,14 +50,14 @@ interface WorkspacePageProps {
 }
 
 export const WorkspacePage: React.FC<WorkspacePageProps> = ({ initialTab = 'all' }) => {
+  const { collectionId: urlCollectionId } = useParams<{ collectionId?: string }>();
+  const navigate = useNavigate();
   const { workspaceService, graphDataService } = useDomainServices();
+
   const [collections, setCollections] = useState<Collection[]>([]);
   const [annotations, setAnnotations] = useState<NodeAnnotation[]>([]);
   const [annotatedNodeDetails, setAnnotatedNodeDetails] = useState<Map<string, GraphNode>>(new Map());
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-
-  // Navegación hacia el análisis de colección
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
   // Modal Crear Colección
   const [isColModalOpen, setIsColModalOpen] = useState<boolean>(false);
@@ -108,12 +109,12 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ initialTab = 'all'
     };
   }, [fetchWorkspaceData]);
 
-  // Si hay una colección seleccionada, renderizar la vista de Análisis
-  if (selectedCollectionId) {
+  // Si hay una colección en la URL, renderizar la vista de Análisis
+  if (urlCollectionId) {
     return (
       <CollectionAnalysisPage
-        collectionId={selectedCollectionId}
-        onBack={() => setSelectedCollectionId(null)}
+        collectionId={urlCollectionId}
+        onBack={() => navigate('/workspace/collections')}
       />
     );
   }
@@ -215,7 +216,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ initialTab = 'all'
                   collections.map((col) => (
                     <div
                       key={col.id}
-                      onClick={() => setSelectedCollectionId(col.id)}
+                      onClick={() => navigate(`/workspace/collections/${col.id}`)}
                       className="p-4 bg-muted/20 hover:bg-muted/40 border border-border rounded-lg flex items-center justify-between cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -239,7 +240,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ initialTab = 'all'
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedCollectionId(col.id);
+                            navigate(`/workspace/collections/${col.id}`);
                           }}
                           className="gap-2 text-base font-medium"
                         >

@@ -11,17 +11,18 @@ export interface Viewport {
 export function cullNodes(
   positions: Map<string, NodePosition>,
   viewport: Viewport,
-  margin: number = 50
+  margin: number = 100
 ): Set<string> {
   const visible = new Set<string>();
 
-  const minX = (viewport.x - margin) / viewport.zoom;
-  const maxX = (viewport.x + viewport.width + margin) / viewport.zoom;
-  const minY = (viewport.y - margin) / viewport.zoom;
-  const maxY = (viewport.y + viewport.height + margin) / viewport.zoom;
+  // Convertir límites de la pantalla a coordenadas del mundo infinito del lienzo
+  const worldLeft = (-viewport.x - margin) / viewport.zoom;
+  const worldRight = (-viewport.x + viewport.width + margin) / viewport.zoom;
+  const worldTop = (-viewport.y - margin) / viewport.zoom;
+  const worldBottom = (-viewport.y + viewport.height + margin) / viewport.zoom;
 
   positions.forEach((pos, id) => {
-    if (pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY) {
+    if (pos.x >= worldLeft && pos.x <= worldRight && pos.y >= worldTop && pos.y <= worldBottom) {
       visible.add(id);
     }
   });

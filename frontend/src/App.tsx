@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DomainProvider } from './context/DomainProvider';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -9,24 +9,25 @@ import { WorkspacePage } from './pages/WorkspacePage';
 import { PipelinesPage } from './pages/PipelinesPage';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-export type Tab = 'dashboard' | 'explorer' | 'workspace' | 'workspace-collections' | 'workspace-annotations' | 'pipelines';
-
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full bg-background text-foreground font-sans overflow-hidden">
-        <AppSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <AppSidebar />
         <SidebarInset className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden">
-          <SiteHeader activeTab={activeTab} />
+          <SiteHeader />
           <main className="flex-1 overflow-y-auto">
-            {activeTab === 'dashboard' && <DashboardPage />}
-            {activeTab === 'explorer' && <ExplorerPage />}
-            {activeTab === 'workspace' && <WorkspacePage initialTab="all" />}
-            {activeTab === 'workspace-collections' && <WorkspacePage initialTab="collections" />}
-            {activeTab === 'workspace-annotations' && <WorkspacePage initialTab="annotations" />}
-            {activeTab === 'pipelines' && <PipelinesPage />}
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/explorer" element={<ExplorerPage />} />
+              <Route path="/workspace" element={<WorkspacePage initialTab="all" />} />
+              <Route path="/workspace/collections" element={<WorkspacePage initialTab="collections" />} />
+              <Route path="/workspace/collections/:collectionId" element={<WorkspacePage initialTab="collections" />} />
+              <Route path="/workspace/annotations" element={<WorkspacePage initialTab="annotations" />} />
+              <Route path="/pipelines" element={<PipelinesPage />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
           </main>
         </SidebarInset>
       </div>
@@ -36,10 +37,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <DomainProvider>
-      <TooltipProvider>
-        <AppContent />
-      </TooltipProvider>
-    </DomainProvider>
+    <BrowserRouter>
+      <DomainProvider>
+        <TooltipProvider>
+          <AppContent />
+        </TooltipProvider>
+      </DomainProvider>
+    </BrowserRouter>
   );
 }

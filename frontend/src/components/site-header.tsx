@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,21 +11,15 @@ import { Separator } from "@/components/ui/separator"
 import { useSidebar } from "@/components/ui/sidebar"
 import { SidebarSimple, Graph } from "@phosphor-icons/react"
 
-interface SiteHeaderProps {
-  activeTab: string;
-}
-
-export function SiteHeader({ activeTab }: SiteHeaderProps) {
+export function SiteHeader() {
   const { toggleSidebar } = useSidebar()
+  const location = useLocation()
 
-  const getPageTitle = (tab: string) => {
-    switch (tab) {
-      case 'dashboard': return 'Dashboard Resumen';
-      case 'explorer': return 'Navegador de Grafo (Canvas Engine)';
-      case 'workspace': return 'Workspace & Colecciones';
-      case 'pipelines': return 'Pipelines de Análisis';
-      default: return 'OptimusKG';
-    }
+  const getPageTitle = (pathname: string) => {
+    if (pathname.startsWith('/explorer')) return 'Navegador de Grafo (Canvas Engine)';
+    if (pathname.startsWith('/workspace')) return 'Workspace & Colecciones';
+    if (pathname.startsWith('/pipelines')) return 'Pipelines de Análisis';
+    return 'Dashboard Resumen';
   }
 
   return (
@@ -53,7 +48,7 @@ export function SiteHeader({ activeTab }: SiteHeaderProps) {
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbPage className="text-base font-semibold text-foreground">
-                {getPageTitle(activeTab)}
+                {getPageTitle(location.pathname)}
               </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>

@@ -13,7 +13,6 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import type { Tab } from "@/App"
 
 const data = {
   user: {
@@ -24,37 +23,37 @@ const data = {
   navMain: [
     {
       title: "Dashboard",
-      key: "dashboard" as const,
+      url: "/dashboard",
       icon: Graph,
     },
     {
       title: "Navegador de Grafo",
-      key: "explorer" as const,
+      url: "/explorer",
       icon: MagnifyingGlass,
     },
     {
       title: "Workspace",
-      key: "workspace" as const,
+      url: "/workspace",
       icon: Folder,
       items: [
         {
           title: "Colecciones",
-          subKey: "workspace-collections" as const,
+          url: "/workspace/collections",
         },
         {
           title: "Anotaciones",
-          subKey: "workspace-annotations" as const,
+          url: "/workspace/annotations",
         },
       ],
     },
     {
       title: "Pipelines & Jobs",
-      key: "pipelines" as const,
+      url: "/pipelines",
       icon: Cpu,
       items: [
         {
           title: "Ejecuciones",
-          subKey: "pipelines" as const,
+          url: "/pipelines",
         },
       ],
     },
@@ -73,19 +72,14 @@ const data = {
   ],
 }
 
-interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  activeTab: Tab;
-  setActiveTab: (tab: Tab) => void;
-}
-
-export function AppSidebar({ activeTab, setActiveTab, ...props }: AppSidebarProps) {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} activeTab={activeTab} setActiveTab={setActiveTab} />
+        <NavMain items={data.navMain} />
         <NavProjects projects={data.projects} />
       </SidebarContent>
       <SidebarFooter>

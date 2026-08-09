@@ -1,6 +1,7 @@
 "use client"
 
 import { ChevronRight } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,26 +17,25 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import type { Tab } from "@/App"
+
+export interface NavItem {
+  title: string
+  url: string
+  icon: React.ElementType
+  items?: {
+    title: string
+    url: string
+  }[]
+}
 
 export function NavMain({
   items,
-  activeTab,
-  setActiveTab,
 }: {
-  items: {
-    title: string
-    key: Tab
-    icon: React.ElementType
-    items?: {
-      title: string
-      subKey?: Tab
-      url?: string
-    }[]
-  }[]
-  activeTab?: Tab
-  setActiveTab?: (tab: Tab) => void
+  items: NavItem[]
 }) {
+  const location = useLocation()
+  const currentPath = location.pathname
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel className="text-base font-semibold text-muted-foreground mb-2">
@@ -44,7 +44,7 @@ export function NavMain({
       <SidebarMenu>
         {items.map((item) => {
           const Icon = item.icon
-          const isActive = activeTab === item.key || item.items?.some(s => s.subKey === activeTab)
+          const isActive = currentPath === item.url || item.items?.some(s => currentPath === s.url)
 
           if (!item.items?.length) {
             return (
@@ -52,8 +52,8 @@ export function NavMain({
                 <SidebarMenuButton
                   tooltip={item.title}
                   isActive={isActive}
-                  onClick={() => setActiveTab?.(item.key)}
                   className="text-base font-medium"
+                  render={<Link to={item.url} />}
                 >
                   <Icon size={20} />
                   <span>{item.title}</span>
@@ -72,14 +72,14 @@ export function NavMain({
               <SidebarMenuButton
                 tooltip={item.title}
                 isActive={isActive}
-                onClick={() => setActiveTab?.(item.key)}
                 className="text-base font-medium flex items-center justify-between"
+                render={<Link to={item.url} />}
               >
                 <div className="flex items-center gap-2">
                   <Icon size={20} />
                   <span>{item.title}</span>
                 </div>
-                <CollapsibleTrigger render={<button type="button" className="p-1 hover:bg-muted rounded" />}>
+                <CollapsibleTrigger render={<button type="button" className="p-1 hover:bg-muted rounded" onClick={(e) => e.stopPropagation()} />}>
                   <ChevronRight size={16} className="transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                 </CollapsibleTrigger>
               </SidebarMenuButton>
@@ -89,13 +89,9 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton
-                        onClick={() => {
-                          if (subItem.subKey) {
-                            setActiveTab?.(subItem.subKey);
-                          }
-                        }}
-                        isActive={activeTab === subItem.subKey}
+                        isActive={currentPath === subItem.url}
                         className="text-base cursor-pointer"
+                        render={<Link to={subItem.url} />}
                       >
                         <span>{subItem.title}</span>
                       </SidebarMenuSubButton>
