@@ -17,7 +17,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Slider } from '@/components/ui/slider';
 import {
   MagnifyingGlass,
   BookmarkSimple,
@@ -394,21 +393,20 @@ export const ExplorerPage: React.FC = () => {
           {/* Regulador de Distancia entre Nodos */}
           <div className="flex items-center gap-3 bg-white px-3 py-1.5 border border-border rounded-lg">
             <span className="text-base font-medium text-foreground whitespace-nowrap">Distancia Nodos:</span>
-            <Slider
-              value={[nodeDistance]}
+            <input
+              type="range"
               min={60}
               max={350}
               step={10}
-              onValueChange={(val) => {
-                const dist = Array.isArray(val) ? val[0] : (val as unknown as number);
-                if (typeof dist === 'number') {
-                  setNodeDistance(dist);
-                  physicsEngineRef.current?.setDistance(dist);
-                }
+              value={nodeDistance}
+              onChange={(e) => {
+                const dist = Number(e.target.value);
+                setNodeDistance(dist);
+                physicsEngineRef.current?.setDistance(dist);
               }}
-              className="w-32 cursor-pointer"
+              className="w-32 cursor-pointer accent-primary h-2 bg-slate-200 rounded-lg appearance-none"
             />
-            <span className="text-base font-mono text-muted-foreground w-12">{nodeDistance}px</span>
+            <span className="text-base font-mono text-muted-foreground w-14">{nodeDistance}px</span>
           </div>
         </div>
       </div>
