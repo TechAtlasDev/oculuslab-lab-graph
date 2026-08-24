@@ -2,6 +2,55 @@ import type { IGraphRepository, GetNeighborsOptions, SearchOptions } from './IGr
 import type { GraphNode, GraphEdge, Subgraph, Metapath, GraphSchema } from '../../types';
 
 const MOCK_NODES: GraphNode[] = [
+  {
+    id: 'node-hernia',
+    label: 'Disease',
+    name: 'Inguinal Hernia',
+    description: 'Protrusion of abdominal-cavity contents through the inguinal canal',
+    properties: { omim: '609204', mondo: '0005086', category: 'Phenotype / Disease' }
+  },
+  {
+    id: 'node-tgfbr2',
+    label: 'Gene',
+    name: 'TGFBR2',
+    description: 'Transforming Growth Factor Beta Receptor 2, critical in extracellular matrix homeostasis',
+    properties: { chromosome: '3p24.1', hgnc: '11773', omim: '190182', ncbiGene: '7048' }
+  },
+  {
+    id: 'node-tgfbr2-protein',
+    label: 'Protein',
+    name: 'TGF-beta Receptor Type 2',
+    description: 'Transmembrane serine/threonine kinase receptor for TGF-beta',
+    properties: { uniprot: 'P37173', mass: '64.6 kDa' }
+  },
+  {
+    id: 'node-tgfbeta-pathway',
+    label: 'Pathway',
+    name: 'TGF-beta Signaling Pathway',
+    description: 'Regulates cell proliferation, differentiation, and extracellular matrix formation',
+    properties: { reactomeId: 'R-HSA-170834', kegg: 'hsa04350' }
+  },
+  {
+    id: 'node-galunisertib',
+    label: 'Drug',
+    name: 'Galunisertib',
+    description: 'Small molecule inhibitor targeting TGF-beta receptor type I/II kinase',
+    properties: { chembl: '2103848', phase: 'Clinical Trial (Phase II)', targetType: 'Kinase Inhibitor' }
+  },
+  {
+    id: 'node-pirfenidone',
+    label: 'Drug',
+    name: 'Pirfenidone',
+    description: 'Antifibrotic agent that suppresses TGF-beta pathway expression',
+    properties: { chembl: '1422', phase: 'Approved', approvalYear: '2014' }
+  },
+  {
+    id: 'node-fbn1',
+    label: 'Gene',
+    name: 'FBN1',
+    description: 'Fibrillin 1, key structural component of connective tissue microfibrils',
+    properties: { chromosome: '15q21.1', hgnc: '3601', omim: '134797' }
+  },
   { id: 'node-1', label: 'Gene', name: 'TP53', description: 'Tumor Protein P53, key regulator in DNA repair', properties: { chromosome: '17', organism: 'Homo sapiens' } },
   { id: 'node-2', label: 'Protein', name: 'p53 Protein', description: 'Cellular tumor antigen p53', properties: { mass: '53 kDa' } },
   { id: 'node-3', label: 'Disease', name: 'Li-Fraumeni Syndrome', description: 'Rare hereditary cancer predisposition syndrome', properties: { omim: '151623' } },
@@ -12,6 +61,12 @@ const MOCK_NODES: GraphNode[] = [
 ];
 
 const MOCK_EDGES: GraphEdge[] = [
+  { id: 'edge-hernia-tgfbr2', source: 'node-hernia', target: 'node-tgfbr2', type: 'ASSOCIATED_WITH', weight: 0.96 },
+  { id: 'edge-tgfbr2-protein', source: 'node-tgfbr2', target: 'node-tgfbr2-protein', type: 'ENCODES', weight: 1.0 },
+  { id: 'edge-tgfbr2-pathway', source: 'node-tgfbr2', target: 'node-tgfbeta-pathway', type: 'PARTICIPATES_IN', weight: 0.98 },
+  { id: 'edge-galunisertib-tgfbr2', source: 'node-galunisertib', target: 'node-tgfbr2', type: 'TARGETS', weight: 0.92 },
+  { id: 'edge-pirfenidone-pathway', source: 'node-pirfenidone', target: 'node-tgfbeta-pathway', type: 'TARGETS', weight: 0.89 },
+  { id: 'edge-hernia-fbn1', source: 'node-hernia', target: 'node-fbn1', type: 'ASSOCIATED_WITH', weight: 0.88 },
   { id: 'edge-1', source: 'node-1', target: 'node-2', type: 'ENCODES' },
   { id: 'edge-2', source: 'node-1', target: 'node-3', type: 'ASSOCIATED_WITH' },
   { id: 'edge-3', source: 'node-4', target: 'node-1', type: 'TARGETS' },

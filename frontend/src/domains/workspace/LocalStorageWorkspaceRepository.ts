@@ -43,10 +43,20 @@ export class LocalStorageWorkspaceRepository implements IWorkspaceRepository {
   async getCollections(): Promise<Collection[]> {
     return this.readJson<Collection[]>(STORAGE_KEYS.COLLECTIONS, [
       {
+        id: 'col-clinical-demo',
+        name: 'Caso Clínico: Inguinal Hernia - TGFBR2',
+        description: 'Análisis de asociación gen-enfermedad y candidatos terapéuticos (Figura 3a del Paper)',
+        icon: 'Dna',
+        nodeIds: ['node-hernia', 'node-tgfbr2', 'node-tgfbr2-protein', 'node-tgfbeta-pathway', 'node-galunisertib', 'node-pirfenidone', 'node-fbn1'],
+        edgeIds: ['edge-hernia-tgfbr2', 'edge-tgfbr2-protein', 'edge-tgfbr2-pathway', 'edge-galunisertib-tgfbr2', 'edge-pirfenidone-pathway', 'edge-hernia-fbn1'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
         id: 'col-default',
         name: 'Oncology Targets',
         description: 'Key genes associated with cancer research',
-        icon: 'Dna',
+        icon: 'Atom',
         nodeIds: ['node-1', 'node-3', 'node-6'],
         edgeIds: ['edge-2', 'edge-5'],
         createdAt: new Date().toISOString(),

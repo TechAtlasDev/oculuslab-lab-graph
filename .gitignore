@@ -1,0 +1,15 @@
+# Environment & Dependencies
+.venv/
+node_modules/
+dist/
+dist-ssr/
+build/
+*.egg-info/
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.coverage
+
+# Logs & temp
+*.log
+.DS_Store

@@ -14,7 +14,28 @@ export interface RenderConfig {
   showLabels: boolean;
   selectedNodeId?: string | null;
   selectedNodeIds?: Set<string>;
+  selectedEdgeId?: string | null;
   selectionBox?: SelectionBox | null;
+}
+
+export function hitTestEdge(
+  px: number,
+  py: number,
+  srcX: number,
+  srcY: number,
+  tgtX: number,
+  tgtY: number,
+  threshold: number = 8
+): boolean {
+  const lineLenSq = (tgtX - srcX) ** 2 + (tgtY - srcY) ** 2;
+  if (lineLenSq === 0) {
+    return Math.hypot(px - srcX, py - srcY) <= threshold;
+  }
+  // Proyección del punto sobre el segmento de recta
+  const t = Math.max(0, Math.min(1, ((px - srcX) * (tgtX - srcX) + (py - srcY) * (tgtY - srcY)) / lineLenSq));
+  const projX = srcX + t * (tgtX - srcX);
+  const projY = srcY + t * (tgtY - srcY);
+  return Math.hypot(px - projX, py - projY) <= threshold;
 }
 
 export function renderGraphToCanvas(
@@ -45,18 +66,20 @@ export function renderGraphToCanvas(
     const tgtPos = positions.get(edge.target);
 
     if (srcPos && tgtPos && (visibleNodeIds.has(edge.source) || visibleNodeIds.has(edge.target))) {
+      const isSelected = config.selectedEdgeId === edge.id;
+
       ctx.beginPath();
       ctx.moveTo(srcPos.x, srcPos.y);
       ctx.lineTo(tgtPos.x, tgtPos.y);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#cbd5e1'; // slate-300
+      ctx.lineWidth = isSelected ? 4 : 2;
+      ctx.strokeStyle = isSelected ? '#0284c7' : '#cbd5e1'; // sky-600 si está seleccionada, slate-300 por defecto
       ctx.stroke();
 
-      if (viewport.zoom > 0.6) {
+      if (viewport.zoom > 0.5) {
         const midX = (srcPos.x + tgtPos.x) / 2;
         const midY = (srcPos.y + tgtPos.y) / 2;
-        ctx.font = '12px sans-serif';
-        ctx.fillStyle = '#64748b'; // slate-500
+        ctx.font = isSelected ? 'bold 13px sans-serif' : '12px sans-serif';
+        ctx.fillStyle = isSelected ? '#0369a1' : '#64748b'; // sky-700 si está seleccionada, slate-500 por defecto
         ctx.textAlign = 'center';
         ctx.fillText(edge.type, midX, midY - 6);
       }
