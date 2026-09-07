@@ -1,5 +1,6 @@
 # Environment & Dependencies
 .venv/
+.tmp/
 node_modules/
 dist/
 dist-ssr/
